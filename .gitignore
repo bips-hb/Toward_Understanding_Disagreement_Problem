@@ -47,3 +47,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# batctools registries
+registries/*
+
+figures/*
