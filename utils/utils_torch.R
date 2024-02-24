@@ -42,6 +42,7 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
   # Adjust bias vector of last layer
   layers[[length(layers)]]$bias <- layers[[length(layers)]]$bias * 0 +
     median(dataset$train$y)
+  
   # Create torch dataloaders
   cli_progress_step("Creating data loaders...", "Crating data loaders!")
   train_dl <- get_torch_dataset(dataset$train) %>%
@@ -62,7 +63,7 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
       metrics = if (outcome_type == "regression") list(luz_metric_mse()) else list(luz_metric_binary_accuracy())
     ) %>%
     set_hparams(layers = layers, outcome_type = outcome_type) %>%
-    set_opt_hparams(lr = 0.005) %>%
+    set_opt_hparams(lr = 0.01) %>%
     fit(train_dl,
         epochs = 300,
         valid_data = valid_dl,
@@ -73,8 +74,12 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
             mode = "min"),
           luz_callback_early_stopping(
             monitor = "valid_loss",
-            patience = 20,
-            mode = "min"))
+            patience = 30,
+            mode = "min"),
+          luz_callback_lr_scheduler(
+            torch::lr_step, 
+            step_size = 50,
+            gamma = 0.2))
     )
   
   
@@ -144,8 +149,13 @@ get_dense_layers <- function(p, n_units, n_layers, act.fct = "relu") {
   } else {
     layer_units <- n_units / 2^(0:(n_layers - 2))
     layer_units[layer_units < 32] <- 32
+    layer_units[-1] <- pmin(256, layer_units[-1])
     layer_units <- c(p, layer_units, 1)
   }
+  
+  cli_bullets(c(
+    "*" = paste0("Neural Network architecture: ", paste0(layer_units, collapse = " -> "))
+  ))
   
   layers <- lapply(seq_len(length(layer_units) - 1), function(i) {
     list(
@@ -158,35 +168,6 @@ get_dense_layers <- function(p, n_units, n_layers, act.fct = "relu") {
   unlist(layers)
 }
 
-# Encoding functions -----------------------------------------------------------
-one_hot_enc <- function(a, num_levels) {
-  res <- rep(0, num_levels)
-  res[a + 1] <- 1
-  
-  res
-}
-
-dummy_enc <- function(a, num_levels) {
-  res <- rep(0, num_levels - 1)
-  if (a != num_levels - 1) {
-    res[a + 1] <- 1
-  }
-  res
-}
-
-effect_enc <- function(a, num_levels) {
-  res <- rep(0, num_levels - 1)
-  if (a != num_levels - 1) {
-    res[a + 1] <- 1
-  } else {
-    res <- res - 1
-  }
-  res
-}
-
-label_enc <- function(a, num_levels) {
-  as.numeric(a)
-}
 
 binary_enc <- function(a, num_levels) {
   bits <- floor(log(num_levels) / log(2))

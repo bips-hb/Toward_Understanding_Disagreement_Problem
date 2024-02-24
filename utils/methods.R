@@ -3,7 +3,7 @@
 ################################################################################
 
 # Vanilla Gradient -------------------------------------------------------------
-gradient_wrapper <- function(instance, times_input, abs = FALSE) {
+gradient_wrapper <- function(instance, times_input, saliency = FALSE) {
   
   library(innsight)
   start_time <- Sys.time()
@@ -20,8 +20,8 @@ gradient_wrapper <- function(instance, times_input, abs = FALSE) {
   # Get results
   result <- get_result(result)
   dim(result) <- dim(result)[-length(dim(result))]
-  if (abs) {
-    result <- abs(result)
+  if (saliency) {
+    result <- (result)**2
   }
   
   if (times_input) {
@@ -29,8 +29,8 @@ gradient_wrapper <- function(instance, times_input, abs = FALSE) {
   } else {
     method_name <- "Grad"
   }
-  if (abs) {
-    method_name <- paste0(method_name, " (abs)")
+  if (saliency) {
+    method_name <- "Saliency"
   }
   
   gc()

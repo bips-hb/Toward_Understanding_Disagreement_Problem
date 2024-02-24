@@ -13,7 +13,7 @@ set.seed(42)
 data.table::setDTthreads(10)
 
 # Global attributes
-n_cpus <- 25
+n_cpus <- 30
 n_reps <- 50
 reg_name <- "Simulations"
 reg_dir <- here(file.path("registries", reg_name))
@@ -32,91 +32,96 @@ makeExperimentRegistry(
                   "utils/utils_torch.R")),
   seed = 42)
 
+# Load experiments
+source(here("utils/utils_simulation.R"))
+
 ################################################################################
 #                       Simulation: Preprocessing
 ################################################################################
 
-# Define methods
-method_df <- list(
-  Gradient = list(
-    list(times_input = FALSE),
-    list(times_input = FALSE, abs = TRUE),
-    list(times_input = TRUE)),
-  SmoothGrad = list(list(times_input = FALSE, K = 50, noise_level = 0.2)),
-  IntGrad = list(
-    list(n = 50, x_ref = "zeros"),
-    list(n = 50, x_ref = "mean")),
-  ExpGrad = list(list(n = 50)),
-  LRP = list(
-    list(rule_name = "simple", rule_param = 0),
-    list(rule_name = "epsilon", rule_param = 0.1),
-    list(rule_name = "alpha_beta", rule_param = 0.5),
-    list(rule_name = "alpha_beta", rule_param = 1),
-    list(rule_name = "alpha_beta", rule_param = 1.5)),
-  DeepLIFT = list(
-    list(rule_name = "rescale", "zeros"),
-    list(rule_name = "rescale", "mean"),
-    list(rule_name = "reveal_cancel", "zeros"),
-    list(rule_name = "reveal_cancel", "mean")),
-  DeepSHAP = list(
-    list(rule_name = "rescale"),
-    list(rule_name = "reveal_cancel"))
-)
+# Select methods
+# (remove model-agnostic approaches)
+prep_method_df <- METHOD_DF
+prep_method_df[["SHAP"]] <- NULL
 
 # Problems --------------------------------------------------------------------- 
 addProblem(name = "Prep_cont", fun = syn_numerical, seed = 42)
 addProblem(name = "Prep_cat", fun = syn_categorical, seed = 43)
 
 # Algorithms -------------------------------------------------------------------
-addAlgorithm(name = "Correlation", fun = get_algo_fun(method_df))
+addAlgorithm(name = "Correlation", fun = apply_methods)
 
-# Experiments ------------------------------------------------------------------
+# Combine all to the problem design
+Prep_prob_design <- list(Prep_cont = Prep_cont, Prep_cat = Prep_cat)
 
-#
-# Continuous variables
-#
-Prep_cont <- expand.grid(
-  n = 3000,
-  n_test = 1000,
-  p = 12,
-  beta = "equal",
-  mean = "range",
-  sample_type = "normal",
-  dgp_type = c("linear", "pwlinear", "squared", "cos", "nonlinear"),
-  scale_type = c("scale_none", "scale_zscore" , "scale_minmax", "scale_maxabs"),
-  nn_units = 256,
-  nn_layers = 3,
-  nn_act.fct = "relu"
-)
-
-#
-# Binary/Categorical variables
-#
-Prep_cat <- expand.grid(
-  n = 3000,
-  n_test = 1000,
-  p = 12,
-  n_levels = c(2, 6, 10, 20),
-  beta = "equal",
-  level_beta = "mixed",
-  level_probs = "equal",
-  encode_type = c("encode_label", "encode_onehot", "encode_dummy", "encode_effect"),
-  nn_units = 256,
-  nn_layers = 3,
-  nn_act.fct = "relu"
-)
-
-prob_design <- list(Prep_cont = Prep_cont, Prep_cat = Prep_cat)
-
-# 
 # Define Algorithms and add Experiments
-#
-algo_design <- list(Correlation = expand.grid(compare_type = "correlation"))
-addExperiments(prob_design, algo_design, repls = n_reps)
+Prep_algo_design <- list(
+  Correlation = expand.grid(
+    compare_type = "correlation",
+    method_df = list(prep_method_df)))
+
+################################################################################
+#                       Simulation: Faithfulness
+################################################################################
+
+# Apply all methods
+faith_method_df <- METHOD_DF
+
+# Problems --------------------------------------------------------------------- 
+addProblem(name = "Faith_cont", fun = syn_numerical, seed = 44)
+addProblem(name = "Faith_cat", fun = syn_categorical, seed = 45)
+
+# Algorithms -------------------------------------------------------------------
+addAlgorithm(name = "Correlation", fun = apply_methods)
+
+# Combine all to the problem design
+Faith_prob_design <- list(Faith_cont = Faith_cont, Faith_cat = Faith_cat)
+
+# Define Algorithms and add Experiments
+Faith_algo_design <- list(
+  Correlation = expand.grid(
+    compare_type = "correlation", 
+    method_df = list(faith_method_df)))
+
+################################################################################
+#                       Simulation: Robustness
+################################################################################
+
+# Select methods
+# (remove model-agnostic approaches)
+robust_method_df <- METHOD_DF
+robust_method_df[["SHAP"]] <- NULL
+
+# Problems --------------------------------------------------------------------- 
+addProblem(name = "Robust_p_cont", fun = syn_numerical, seed = 46)
+addProblem(name = "Robust_p_cat", fun = syn_categorical, seed = 47)
+addProblem(name = "Robust_corr", fun = syn_numerical, seed = 48)
+
+# Algorithms -------------------------------------------------------------------
+addAlgorithm(name = "Uninformative", fun = apply_methods)
+
+# Combine all to the problem design
+Robust_prob_design <- list(Robust_p_cont = Robust_p_cont, 
+                           Robust_p_cat = Robust_p_cat)
+
+# Define Algorithms and add Experiments
+Robust_algo_design <- list(
+  Uninformative = expand.grid(compare_type = "uninformative", 
+                              method_df = list(robust_method_df)))
+
+################################################################################
+#                         Add all experiments 
+###############################################################################
+
+addExperiments(Prep_prob_design, Prep_algo_design, repls = n_reps)
+#addExperiments(Faith_prob_design, Faith_algo_design, repls = n_reps)
+#addExperiments(Robust_prob_design, Robust_algo_design, repls = n_reps)
+#addExperiments(list(Robust_corr = Robust_corr), Robust_algo_design, repls = n_reps)
+
 summarizeExperiments()
 
 # Test jobs --------------------------------------------------------------------
-testJob(id = 1)
+#testJob(id = 277)
 
 # Submit -----------------------------------------------------------------------
 submitJobs(resources = list(name = reg_name,
@@ -124,3 +129,79 @@ submitJobs(resources = list(name = reg_name,
                             max.concurrent.jobs = 40))
 waitForJobs()
 
+################################################################################
+#                     Show results and create outputs
+################################################################################
+library("ggplot2")
+library("cowplot")
+library("ggthemes")
+library("sysfonts")
+library("showtext")
+
+# Load LaTeX font (Latin modern), only relevant for setting the fonts as in the
+# paper, but requires the latinmodern-math font
+font_add("LModern_math", here("utils/latinmodern-math.otf"))
+showtext_auto()
+
+source(here("utils/utils_figures.R"))
+
+# Set ggplot2 theme
+theme_set(
+  theme_bw(base_size = 18, base_family = "LModern_math", base_line_size = 1) +
+    theme(
+      axis.title = element_text(face = "bold"),
+      strip.text = element_text(face = "bold", size = 16),
+      axis.text.y = element_text(size = 13)
+    )
+)
+
+# Load and prepare results from registry ---------------------------------------
+res <- get_and_prepare_results(reg_dir, here("utils/config.R"))
+res_error <- res$res_error
+
+# Preprocessing ----------------------------------------------------------------
+
+# Crate and save the model error plots
+create_modelerror_fig(res_error[problem %in% c("Prep_cont", "Prep_cat")], "Prep")
+
+# Create results plot
+res_prep <- res$res_corr[problem %in% c("Prep_cont", "Prep_cat")]
+create_preprocess_fig(res_prep)
+
+# Faithfulness -----------------------------------------------------------------
+
+# Crate and save the model error plots
+create_modelerror_fig(res_error[problem %in% c("Faith_cont", "Faith_cat")], "Faith")
+
+# Create results plot
+res_faith <- res$res_corr[problem %in% c("Faith_cont", "Faith_cat")]
+create_faithfulness_fig(res_faith)
+
+# Robustness: Number of uninformative variables --------------------------------
+
+# Crate and save the model error plots
+create_modelerror_fig(res_error[problem %in% c("Robust_p_cont", "Robust_p_cat")], "Robust_p")
+
+# Create results plot
+res_robust_p <- res$res_uninform[problem %in% c("Robust_p_cont", "Robust_p_cat")]
+create_robustness_p_fig(res_robust_p)
+
+
+
+result <- res$res_uninform[problem == "Robust_corr"]
+res_tmp <- result[, .(
+  mean = mean(percent_to_uninformative, na.rm = TRUE),
+  q1 = quantile(percent_to_uninformative, probs = 0.25, na.rm = TRUE),
+  q3 = quantile(percent_to_uninformative, probs = 0.75, na.rm = TRUE),
+  n_NA = sum(is.na(percent_to_uninformative))
+),  by = c("problem", "p", "data_type", "facet_lab", "method_name",
+           "paper_grp", "corr")]
+
+ggplot(res_tmp) +
+  geom_line(aes(x = as.numeric(corr), y = mean, color = method_name)) +
+  geom_ribbon(aes(x = as.numeric(corr), ymin = q1, ymax = q3, fill = method_name), alpha = 0.1) +
+  #facet_grid(cols = vars(paper_grp), space = "free_y", scales = "free") +
+  xlab("Number of variables") + ylab("Ratio of uninformative") +
+  theme(panel.spacing = unit(0, "lines")) +
+  guides(color = "none", fill = "none") +
+  geom_hline(yintercept = 0, color = "darkgray")

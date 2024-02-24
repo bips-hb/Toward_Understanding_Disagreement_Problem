@@ -1,10 +1,6 @@
 ################################################################################
 #                               Algorithms
 ################################################################################
-get_algo_fun <- function(method_df) {
-  function(...) apply_methods(method_df = method_df, ...)
-}
-
 apply_methods <- function(data, job, instance, compare_type = "cor", method_df = NULL) {
   source(here("utils/methods.R"))
   
@@ -24,6 +20,9 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
   } else if (compare_type == "uninformative") {
     res <- lapply(res_list, compare_uninformative, instance = instance)
     res <- do.call("rbind", args = res)
+  } else if (compare_type == "global") {
+    res <- lapply(res_list, compare_global, instance = instance)
+    res <- do.call("rbind", args = res)
   }
   
   res$method_name <- factor(res$method_name, levels = METHOD_LEVELS)
@@ -36,7 +35,6 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
                     predict(model, 
                             newdata = as.data.frame(instance$dataset$test)))**2)
   lm_rsquared <- summary(model)$r.squared
-  
   
   data.table(res, model_error = instance$error, lm_error = lm_mse, lm_rsquared = lm_rsquared,
              r_squared = instance$r_squared_test, r_squared_true = instance$r_squared_true)
@@ -72,13 +70,29 @@ compare_corelation <- function(result, instance) {
 }
 
 compare_uninformative <- function(result, instance) {
+  
+  # Get informative features
+  info_idx <- which(instance$beta != 0)
+  
   # Combine correlated features
   cor_groups <- instance$dataset$cor_groups
   res <- combine_features(result$result, cor_groups, FUN = base::identity)
+  
+  perc_uninform <- mean(rowSums(abs(res[, -info_idx])) / rowSums(abs(res)), 
+                        na.rm = TRUE)
 
-  data.table(percent_to_uninformative = mean(rowSums(abs(res[, -c(1, 2)])) / rowSums(abs(res))),
+  data.table(percent_to_uninformative = perc_uninform, result$hyperp)
+}
+
+compare_global <- function(result, instance) {
+  # Combine correlated features
+  cor_groups <- instance$dataset$cor_groups
+  res <- combine_features(result$result, cor_groups, FUN = base::identity)
+  
+  data.table(auc = auc((instance$beta == 0) * 1, (rank(colMeans(abs(res))) > 10) * 1),
              result$hyperp)
 }
+
 
 compare_raw <- function(result, instance) {
   
@@ -127,12 +141,11 @@ run_method <- function(method_name, instance, method_args) {
 
 METHOD_LEVELS <- c(
   "LIME", "SHAP",
-  "Grad", "Grad (abs)", "SG",
-  "GxI", "SGxI", 
-  "IntGrad (zeros)", "IntGrad (mean)",
-  "ExpGrad",
+  "Saliency", "SG", "Grad",
+  "SGxI", "GxI",
   "LRP-0", "LRP-ε (0.1)", "LRP-αβ (0.5)", "LRP-αβ (1)", 
   "LRP-αβ (1.5)",
-  "DeepLift-RE (zeros)", "DeepLift-RC (zeros)",
-  "DeepLift-RE (mean)", "DeepLift-RC (mean)",
-  "DeepSHAP-RE", "DeepSHAP-RC")
+  "DeepSHAP-RC", "DeepSHAP-RE", "ExpGrad",
+  "DeepLift-RC (mean)", "DeepLift-RE (mean)", "IntGrad (mean)", 
+  "DeepLift-RC (zeros)", "DeepLift-RE (zeros)", "IntGrad (zeros)" 
+)
