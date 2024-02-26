@@ -3,7 +3,7 @@
 ################################################################################
 
 get_dataset <- function(sample_fun, dgp_fun, n, n_test, preprocess_type = "scale_none",
-                        n_levels = NULL) {
+                        n_levels = NULL, outcome_type = "regression") {
   cli_progress_step("Creating dataset...", "Dataset created!")
   # Sample data
   train_data <- as.matrix(sample_fun(n))
@@ -21,22 +21,35 @@ get_dataset <- function(sample_fun, dgp_fun, n, n_test, preprocess_type = "scale
   preprocess_fun <- get_preprocess_fun(preprocess_type, scale_args = scale_args,
                                        n_levels = n_levels)
   
+  # Define outcome function
+  if (outcome_type == "regression") {
+    out_fun <- function(data, n) {
+      dgp_fun(data)$lp + rnorm(n)
+    }
+  } else if (outcome_type == "classification") {
+    center_point <- median(dgp_fun(train_data)$lp)
+    out_fun <- function(data, n) {
+      lp <- dgp_fun(data)$lp - center_point
+      as.factor(rbinom(n, size = 1, prob = plogis(lp)))
+    }
+  }
+  
   # Create train data
   train <- list(
     x = preprocess_fun(train_data),
-    y = dgp_fun(train_data)$lp + rnorm(n)
+    y = out_fun(train_data, n)
   )
   
   # Create validation data
   valid <- list(
     x = preprocess_fun(val_data), 
-    y = dgp_fun(val_data)$lp + rnorm(as.integer(0.3 * n))
+    y = out_fun(val_data, as.integer(0.3 * n))
   )
   
   # Create test data
   test <- list(
     x = preprocess_fun(test_data),
-    y = dgp_fun(test_data)$lp + rnorm(n_test)
+    y = out_fun(test_data, n_test)
   )
   
   # Create ground truth
@@ -75,13 +88,13 @@ dgp_linear <- function(x, beta, beta0) {
 }
 
 dgp_lin_squared <- function(x, beta, beta0, squared_idx = 2) {
-  x[, squared_idx] <- x[, squared_idx]**2
+  x[, squared_idx] <- cos(x[, squared_idx]*0.4 *pi) * exp(-(0.7 * x[, squared_idx])^2) * 1.768237
   effects <- t(t(x) * beta)
   list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
 dgp_pwlinear <- function(x, beta, beta0) {
-  x <- 
+  res <- (
     (x < -2.75) * (-1) +
     (x >= -2.75 & x < -2.25) * (x + 1.75) +
     (x >= -2.25 & x < -1.75) * (-0.5) +
@@ -94,22 +107,16 @@ dgp_pwlinear <- function(x, beta, beta0) {
     (x >= 1.25 & x < 1.75) * (-x + 1.25) +
     (x >= 1.75 & x < 2.25) * (-0.5) +
     (x >= 2.25 & x < 2.75) * (-x + 1.75) +
-    (x >= 2.75) * (-1)
+    (x >= 2.75) * (-1)) * 2
     
     
-  effects <- t(t(x) * 2 * beta)
+  effects <- t(t(res) * beta)
   list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
 dgp_smooth <- function(x, beta, beta0) {
   
-  #res <- x * 0
-  #res[x <= -0.9 & x > -2.7] <- -(1 - (x[x <= -0.9 & x > -2.7] + 1.8)^2)**(1/3) + (1 - 0.9^2)**(1/3)
-  #res[abs(x) < 0.9] <- (1 - x[abs(x) < 0.9]^2)**(1/3) - (1 - 0.9^2)**(1/3)
-  #res[x >= 0.9 & x < 2.7] <- -(1 - (x[x >= 0.9 & x < 2.7] - 1.8)^2)**(1/3) + (1 - 0.9^2)**(1/3)
-  
-  res <- cos(x*0.4 *pi) * exp(-(0.7*x)^2) * 1.5
-  
+  res <- cos(x*0.4 *pi) * exp(-(0.7*x)^2) * 1.768237
   effects <- t(t(res) * beta)
   list(lp = rowSums(effects) + beta0, effects = effects)
 }

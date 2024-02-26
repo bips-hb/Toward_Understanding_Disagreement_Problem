@@ -3,7 +3,7 @@
 ################################################################################
 
 # Vanilla Gradient -------------------------------------------------------------
-gradient_wrapper <- function(instance, times_input, saliency = FALSE) {
+gradient_wrapper <- function(instance, times_input, saliency = FALSE, ignore_last_act = TRUE) {
   
   library(innsight)
   start_time <- Sys.time()
@@ -15,7 +15,7 @@ gradient_wrapper <- function(instance, times_input, saliency = FALSE) {
   
   # Apply method
   result <- run_grad(converter, instance$data$test$x, times_input = times_input,
-                     verbose = FALSE)
+                     verbose = FALSE, ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -45,7 +45,7 @@ gradient_wrapper <- function(instance, times_input, saliency = FALSE) {
 }
 
 # SmoothGrad -------------------------------------------------------------------
-smoothgrad_wrapper <- function(instance, times_input, K, noise_level) {
+smoothgrad_wrapper <- function(instance, times_input, K, noise_level, ignore_last_act = TRUE) {
   
   library(innsight)
   start_time <- Sys.time()
@@ -60,7 +60,8 @@ smoothgrad_wrapper <- function(instance, times_input, K, noise_level) {
                            times_input = times_input,
                            n = K,
                            noise_level = noise_level,
-                           verbose = FALSE)
+                           verbose = FALSE,
+                           ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -84,7 +85,7 @@ smoothgrad_wrapper <- function(instance, times_input, K, noise_level) {
 }
 
 # IntegratedGradient -----------------------------------------------------------
-intgrad_wrapper <- function(instance, n, x_ref) {
+intgrad_wrapper <- function(instance, n, x_ref, ignore_last_act = TRUE) {
   
   library(innsight)
   x_ref_name <- x_ref
@@ -106,7 +107,8 @@ intgrad_wrapper <- function(instance, n, x_ref) {
   
   # Apply method
   result <- run_intgrad(converter, instance$data$test$x,
-                        x_ref = x_ref, n = n, verbose = FALSE)
+                        x_ref = x_ref, n = n, verbose = FALSE, 
+                        ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -124,7 +126,7 @@ intgrad_wrapper <- function(instance, n, x_ref) {
 }
 
 # ExpectedGradient -------------------------------------------------------------
-expgrad_wrapper <- function(instance, n) {
+expgrad_wrapper <- function(instance, n, ignore_last_act = TRUE) {
   
   library(innsight)
   data_ref <- instance$data$test$x
@@ -137,7 +139,8 @@ expgrad_wrapper <- function(instance, n) {
   
   # Apply method
   result <- run_expgrad(converter, instance$data$test$x,
-                        data_ref = data_ref, n = n, verbose = FALSE)
+                        data_ref = data_ref, n = n, verbose = FALSE, 
+                        ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -155,7 +158,7 @@ expgrad_wrapper <- function(instance, n) {
 }
 
 # LRP --------------------------------------------------------------------------
-lrp_wrapper <- function(instance, rule_name, rule_param) {
+lrp_wrapper <- function(instance, rule_name, rule_param, ignore_last_act = TRUE) {
   
   library(innsight)
   start_time <- Sys.time()
@@ -167,7 +170,8 @@ lrp_wrapper <- function(instance, rule_name, rule_param) {
   
   # Apply method
   result <- run_lrp(converter, instance$data$test$x, rule_name = rule_name,
-                    rule_param = rule_param, verbose = FALSE)
+                    rule_param = rule_param, verbose = FALSE, 
+                    ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -195,7 +199,7 @@ lrp_wrapper <- function(instance, rule_name, rule_param) {
 }
 
 # DeepLift ---------------------------------------------------------------------
-deeplift_wrapper <- function(instance, rule_name, x_ref) {
+deeplift_wrapper <- function(instance, rule_name, x_ref, ignore_last_act = TRUE) {
   
   library(innsight)
   x_ref_name <- x_ref
@@ -218,7 +222,8 @@ deeplift_wrapper <- function(instance, rule_name, x_ref) {
   # Apply method
   result <- run_deeplift(converter, instance$data$test$x,
                          rule_name = as.character(rule_name),
-                         x_ref = x_ref, verbose = FALSE)
+                         x_ref = x_ref, verbose = FALSE, 
+                         ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -244,7 +249,7 @@ deeplift_wrapper <- function(instance, rule_name, x_ref) {
 }
 
 # DeepSHAP ---------------------------------------------------------------------
-deepshap_wrapper <- function(instance, rule_name) {
+deepshap_wrapper <- function(instance, rule_name, ignore_last_act = TRUE) {
   
   library(innsight)
   data_ref <- instance$data$test$x
@@ -259,7 +264,8 @@ deepshap_wrapper <- function(instance, rule_name) {
   result <- run_deepshap(converter, instance$data$test$x,
                          rule_name = as.character(rule_name),
                          data_ref = data_ref, 
-                         limit_ref = 100, verbose = FALSE)
+                         limit_ref = 100, verbose = FALSE, 
+                         ignore_last_act = ignore_last_act)
   
   # Get results
   result <- get_result(result)
@@ -286,7 +292,7 @@ deepshap_wrapper <- function(instance, rule_name) {
 
 
 # Shapley Values --------------------------------------------------------------
-shap_wrapper <- function(instance, nsim = 20) {
+shap_wrapper <- function(instance, nsim = 20, ignore_last_act = TRUE) {
   library(innsight)
   data_ref <- instance$data$test$x
   start_time <- Sys.time()
@@ -309,29 +315,8 @@ shap_wrapper <- function(instance, nsim = 20) {
   )
 }
 
-# Linear model wrapper ---------------------------------------------------------
-lm_wrapper <- function(instance) {
-  start_time <- Sys.time()
-  
-  model <- lm(y ~ ., data = as.data.frame(instance$dataset$train))
-  lm_mse <- mean((instance$dataset$test$y - 
-                    predict(model, 
-                            newdata = as.data.frame(instance$dataset$test)))**2)
-  betas <- model$coefficients[-1]
-  betas[is.na(betas)] <- 1
-  result <- t(t(instance$dataset$test$x) * betas)
-  
-  list(result = result,
-       hyperp = data.frame(
-         method_name = "Linear Model",
-         method_grp = "Intrinsic",
-         time = as.numeric(Sys.time() - start_time, units = "secs")
-       )
-  )
-}
-
 # LIME ------------------------------------------------------------------------
-lime_wrapper <- function(instance) {
+lime_wrapper <- function(instance, ignore_last_act = TRUE) {
   library(innsight)
   data_ref <- instance$data$test$x
   start_time <- Sys.time()

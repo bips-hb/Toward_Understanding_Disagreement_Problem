@@ -13,9 +13,9 @@ set.seed(42)
 data.table::setDTthreads(10)
 
 # Global attributes
-n_cpus <- 30
-n_reps <- 50
-reg_name <- "Simulations"
+n_cpus <- 20
+n_reps <- 10
+reg_name <- "Simulations_final2"
 reg_dir <- here(file.path("registries", reg_name))
 required_pkgs <- c("innsight", "luz", "torch", "mvtnorm", "cli", "here", 
                    "data.table")
@@ -113,10 +113,10 @@ Robust_algo_design <- list(
 #                         Add all experiments 
 ###############################################################################
 
-addExperiments(Prep_prob_design, Prep_algo_design, repls = n_reps)
+#addExperiments(Prep_prob_design, Prep_algo_design, repls = n_reps)
 #addExperiments(Faith_prob_design, Faith_algo_design, repls = n_reps)
-#addExperiments(Robust_prob_design, Robust_algo_design, repls = n_reps)
-#addExperiments(list(Robust_corr = Robust_corr), Robust_algo_design, repls = n_reps)
+addExperiments(Robust_prob_design, Robust_algo_design, repls = n_reps)
+addExperiments(list(Robust_corr = Robust_corr), Robust_algo_design, repls = n_reps)
 
 summarizeExperiments()
 
@@ -180,28 +180,12 @@ create_faithfulness_fig(res_faith)
 # Robustness: Number of uninformative variables --------------------------------
 
 # Crate and save the model error plots
-create_modelerror_fig(res_error[problem %in% c("Robust_p_cont", "Robust_p_cat")], "Robust_p")
+create_modelerror_fig(res_error[problem %in% c("Robust_p_cont", "Robust_p_cat")], "Robust")
 
 # Create results plot
-res_robust_p <- res$res_uninform[problem %in% c("Robust_p_cont", "Robust_p_cat")]
+res_robust_p <- res$res_uninform[problem %in% c("Robust_p_cont")]
 create_robustness_p_fig(res_robust_p)
 
 
-
-result <- res$res_uninform[problem == "Robust_corr"]
-res_tmp <- result[, .(
-  mean = mean(percent_to_uninformative, na.rm = TRUE),
-  q1 = quantile(percent_to_uninformative, probs = 0.25, na.rm = TRUE),
-  q3 = quantile(percent_to_uninformative, probs = 0.75, na.rm = TRUE),
-  n_NA = sum(is.na(percent_to_uninformative))
-),  by = c("problem", "p", "data_type", "facet_lab", "method_name",
-           "paper_grp", "corr")]
-
-ggplot(res_tmp) +
-  geom_line(aes(x = as.numeric(corr), y = mean, color = method_name)) +
-  geom_ribbon(aes(x = as.numeric(corr), ymin = q1, ymax = q3, fill = method_name), alpha = 0.1) +
-  #facet_grid(cols = vars(paper_grp), space = "free_y", scales = "free") +
-  xlab("Number of variables") + ylab("Ratio of uninformative") +
-  theme(panel.spacing = unit(0, "lines")) +
-  guides(color = "none", fill = "none") +
-  geom_hline(yintercept = 0, color = "darkgray")
+res_robust_corr <- res$res_uninform[problem %in% c("Robust_corr", "Robust_corr")]
+create_robustness_corr_fig(res_robust_corr)

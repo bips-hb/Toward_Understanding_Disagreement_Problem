@@ -1,6 +1,8 @@
 ################################################################################
 #                                 Problems
 ################################################################################
+
+# Numerical problems -----------------------------------------------------------
 syn_numerical <- function(data, job, n, p,
                           beta = "positive",
                           sample_type = "normal",
@@ -9,6 +11,7 @@ syn_numerical <- function(data, job, n, p,
                           beta0 = 0,
                           corr = 0,
                           mean = "zeros",
+                          outcome_type = "regression",
                           n_test = 500,
                           nn_layers = 3,
                           nn_units = 256,
@@ -18,7 +21,6 @@ syn_numerical <- function(data, job, n, p,
   mean <- get_mean(mean, p)
   sigma <- get_sigma(corr, p)
   beta <- get_beta(beta, p)
-  outcome_type <- "regression"
   
   print_args(as.list(environment()))
   
@@ -27,25 +29,28 @@ syn_numerical <- function(data, job, n, p,
   dgp_fun <- get_dgp_fun(dgp_type, beta = beta, beta0 = beta0)
   
   # Create data
-  data <- get_dataset(sample_fun, dgp_fun, n, n_test, preprocess_type = scale_type)
+  data <- get_dataset(sample_fun, dgp_fun, n, n_test, preprocess_type = scale_type,
+                      outcome_type = outcome_type)
   
   # Train model
   instance <- train_model(p, nn_units, nn_layers, data, outcome_type, 
                           nn_act.fct)
   
-  # Add beta
+  # Add beta and outcome type
   instance$beta <- beta
+  instance$outcome_type <- outcome_type
   
   instance
 }
 
-
+# Cetegorical problems ---------------------------------------------------------
 syn_categorical <- function(data, job, n, p,
                             beta = "positive",
                             n_levels = 2,
                             level_beta = "random",
                             encode_type = "encode_label",
                             level_probs = "equal",
+                            outcome_type = "regression",
                             n_test = 500,
                             nn_layers = 3,
                             nn_units = 256,
@@ -55,7 +60,6 @@ syn_categorical <- function(data, job, n, p,
   beta <- get_beta(beta, p)
   level_beta <- get_level_beta(level_beta, n_levels)
   level_probs <- get_level_probs(level_probs, n_levels)
-  outcome_type <- "regression"
   
   print_args(as.list(environment()))
   
@@ -75,9 +79,34 @@ syn_categorical <- function(data, job, n, p,
   
   # Add beta
   instance$beta <- beta
+  instance$outcome_type <- outcome_type
   
   instance
 }
+
+
+# Real data problems -----------------------------------------------------------
+get_realdata <- function(data, job, ds_name = "bike_sharing",
+                         n_units = 256,
+                         n_layers = 3, 
+                         act.fct = "relu", ...) {
+  
+  data <- switch(ds_name,
+                 bike_sharing = get_bike_sharing_ds(),
+                 boston_housing = get_boston_housing_ds(),
+                 stop("Unknown dataset name: ", ds_name))
+  
+  # Attributes
+  n_cpus <- 1
+  n_workers <- 0
+  
+  # Train model
+  instance <- train_model(length(data$cor_groups), n_units, n_layers, data, 
+                          data$outcome_type, act.fct, n_cpus, n_workers)
+  
+  instance
+}
+
 
 
 ################################################################################
@@ -86,15 +115,15 @@ syn_categorical <- function(data, job, n, p,
 get_mean <- function(mean, p) {
   switch (as.character(mean),
           zeros = rep(0, p),
-          range = seq(-1, 1, length.out = p),
-          range_random = sample(seq(-1, 1, length.out = p)),
-          random = runif(p, min = -1, max = 1),
+          range = seq(-0.75, 0.75, length.out = p),
+          range_random = sample(seq(-0.75, 0.75, length.out = p)),
+          random = runif(p, min = -0.75, max = 0.75),
           stop("Unknown value of 'mean': '", mean, "'!")
   )
 }
 
 get_sigma <- function(corr, p) {
-  res <- diag(runif(p, 0.9, 1.1))
+  res <- diag(runif(p, 0.9, 1.3))
   
   for (i in seq_len(p)) {
     if (i %% 2 == 1 &  i != p) {
@@ -108,10 +137,10 @@ get_sigma <- function(corr, p) {
 
 get_beta <- function(beta, p) {
   switch (as.character(beta),
-          first_two = c(2, -2, rep(0, length.out = p - 2)),
+          first_two = c(1, -1, rep(0, length.out = p - 2)),
           swapping = rep(c(2, 0), length.out = p),
           equal = rep(1, length.out = p),
-          grouped = rep(c(1/3, 2/3, 1), each = p %/% 3, length.out = p),
+          grouped = rep(c(0.1, 0.4, 0.9), each = p %/% 3, length.out = p),
           positive = seq(1/p, 1, length.out = p),
           negative = -seq(1/p, 1, length.out = p),
           mixed = seq(-1, 1, length.out = p),
@@ -143,6 +172,7 @@ print_args <- function(args) {
   
   if (!is.null(args$sample_type)) {
     cli_bullets(c(
+      "*" = paste0("Outcome: {.val {args$outcome_type}}"),
       "*" = paste0("Number of samples: {.val {args$n}}"),
       "*" = paste0("Number of variables: {.val {args$p}}"),
       "*" = paste0("Sample type: {.val {args$sample_type}}"),
@@ -157,6 +187,7 @@ print_args <- function(args) {
     ))
   } else {
     cli_bullets(c(
+      "*" = paste0("Outcome: {.val {args$outcome_type}}"),
       "*" = paste0("Number of samples: {.val {args$n}}"),
       "*" = paste0("Number of variables: {.val {args$p}}"),
       "*" = paste0("Number of levels: {.val {args$n_levels}}"),

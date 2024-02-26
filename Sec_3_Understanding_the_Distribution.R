@@ -17,13 +17,14 @@ library("cli")
 library("ggplot2")
 library("ggridges")
 library("cowplot")
+library("envalysis")
 library("sysfonts")
 library("showtext")
 
 # Load LaTeX font (Latin modern), only relevant for setting the fonts as in the
 # paper, but requires the latinmodern-math font
-font_add("LModern_math", here("utils/latinmodern-math.otf"))
-showtext_auto()
+#font_add("LModern_math", here("utils/latinmodern-math.otf"))
+#showtext_auto()
 
 # Load helper functions
 source(here("utils/utils_torch.R"))
@@ -34,20 +35,14 @@ source(here("utils/utils_figures.R"))
 
 # Function for saving figures
 save_fig <- function(name, ...) {
-  fig_dir <- here("figures/")
+  fig_dir <- here("figures/Sec_3/")
+  if (!dir.exists(fig_dir)) dir.create(fig_dir)
   ggsave(paste0(fig_dir, name, ".pdf"), ...)
 }
 
 # Set ggplot2 theme
 theme_set(
-  theme_bw(base_size = 18, base_family = "LModern_math", base_line_size = 1) +
-    theme(
-      axis.title = element_text(face = "bold"),
-      strip.text = element_text(face = "bold", size = 16),
-      axis.text.y = element_text(size = 13),
-      panel.spacing=unit(0,"lines"),
-      plot.margin = unit(c(0, 0, 0, 0), "cm")
-    )
+  theme_publish(base_size = 16, base_family = "serif", base_line_size = 1)
 )
 
 # Choose the methods to be used for this section
@@ -74,66 +69,23 @@ method_df <- list(
 )
 
 ################################################################################
-#                           Bike Sharing Dataset
-################################################################################
-set.seed(42)
-torch_manual_seed(42)
-
-# Set hyperparameters
-n_units <- 256
-n_layers <- 3
-act.fct <- "relu"
-
-# Get and preprocess the dataset
-data <- get_bike_sharing_ds()
-
-# Train model
-instance <- train_model(length(data$cor_groups), n_units, n_layers, data, 
-                        "regression", act.fct)
-
-# Apply feature attribution methods
-result <- apply_methods(instance = instance, compare_type = "attributions", 
-                        method_df = method_df)
-
-# Generate plot
-methods <- c("DeepSHAP (reveal-cancel)", "DeepLift (rescale, zeros)",  
-             "LRP (alpha-beta, 1.5)", "LRP (alpha-beta, 1)", 
-             "ExpectedGradient", "IntegratedGradient (mean)",
-             "Gradient x Input", "Gradient")
-ggplot(result[feature %in% c("X1", "X7")]) +
-  geom_density_ridges_gradient(aes(x = attribution, y = method_name, fill = after_stat(x)), 
-                               scale = 2, rel_min_height = 0.01, alpha = 0.8) +
-  facet_grid(cols = vars(feature), scales = "free",
-             labeller = labeller(feature = c(X1 = "Temperature (normalized)", 
-                                             X7 = "Weekday"))) +
-  scale_fill_gradient2(low = "#3A3A98", high = "#832424", limits = c(-1.5, 1.5),
-                       oob = scales::squish) +
-  geom_vline(xintercept = 0, color = "gray40") +
-  xlab("Attribution") + ylab("") +
-  guides(fill = "none") +
-  theme(text = element_text(family = "LModern_math", size = 14))
-
-# Save plot
-save_fig("Sec_3_bike_sharing", width = 8, height = 5)
-
-################################################################################
 #                       Section 3: Running Example
 ################################################################################
 set.seed(42)
 torch_manual_seed(42)
 
 # Set hyperparameters
-n_units <- 256
+n_units <- 128
 n_layers <- 3
 act.fct <- "relu"
 
 # Define attributes
-n <- 3000
+n <- 2000
 n_test <- 1000
 p <- 4
 
 # Which dataset instance should be visualized?
-idx <- 22
+idx <- 60
 
 # Define data generating process (y = x1 + x2 + x3^2, x4 - 0.5)
 # and sample function
@@ -163,7 +115,7 @@ res_instance <- res[seq(1, n_x * 2, by = n_test) + idx, ]
 create_distribution_fig(res, res_instance)
 
 # Save plot
-save_fig("Sec_3_group_1", width = 8.5, height = 6)
+save_fig("Sec_3_group_1", width = 8.5, height = 5.5)
 
 # Create plot for the second group ---------------------------------------------
 # i.e., Gradient x Input, LRP
@@ -177,7 +129,7 @@ res_instance <- res[seq(1, n_x * 3, by = n_test) + idx, ]
 create_distribution_fig(res, res_instance)
 
 # Save plot
-save_fig("Sec_3_group_2", width = 8.5, height = 6)
+save_fig("Sec_3_group_2", width = 8.5, height = 5.5)
 
 # Create plot for the third group ----------------------------------------------
 # Integrated Gradient, DeepLIFT 
@@ -190,7 +142,7 @@ res_instance <- res[seq(1, n_x * 2, by = n_test) + idx, ]
 create_distribution_fig(res, res_instance)
 
 # Save plot
-save_fig("Sec_3_group_3", width = 8.5, height = 6)
+save_fig("Sec_3_group_3", width = 8.5, height = 5.5)
 
 
 names <- c("IntGrad (zeros)", "DeepLift-RE (zeros)", "DeepLift-RC (zeros)",
@@ -203,7 +155,7 @@ res_instance <- res[seq(1, n_x * 6, by = n_test) + idx, ]
 create_distribution_fig(res, res_instance)
 
 # Save plot
-save_fig("App_Sec_3_group_3_extended", width = 17, height = 6)
+save_fig("App_Sec_3_group_3_extended", width = 17, height = 5.5)
 
 
 # Create plot for the fourth group ----------------------------------------------
@@ -217,4 +169,48 @@ res_instance <- res[seq(1, n_x * 2, by = n_test) + idx, ]
 create_distribution_fig(res, res_instance)
 
 # Save plot
-save_fig("Sec_3_group_4", width = 8, height = 6)
+save_fig("Sec_3_group_4", width = 8.5, height = 5.5)
+
+
+# ################################################################################
+# #                           Bike Sharing Dataset
+# ################################################################################
+# set.seed(42)
+# torch_manual_seed(42)
+# 
+# # Set hyperparameters
+# n_units <- 256
+# n_layers <- 3
+# act.fct <- "relu"
+# 
+# # Get and preprocess the dataset
+# data <- get_bike_sharing_ds()
+# 
+# # Train model
+# instance <- train_model(length(data$cor_groups), n_units, n_layers, data, 
+#                         "regression", act.fct)
+# 
+# # Apply feature attribution methods
+# result <- apply_methods(instance = instance, compare_type = "attributions", 
+#                         method_df = method_df)
+# 
+# # Generate plot
+# methods <- c("DeepSHAP (reveal-cancel)", "DeepLift (rescale, zeros)",  
+#              "LRP (alpha-beta, 1.5)", "LRP (alpha-beta, 1)", 
+#              "ExpectedGradient", "IntegratedGradient (mean)",
+#              "Gradient x Input", "Gradient")
+# ggplot(result[feature %in% c("X1", "X7")]) +
+#   geom_density_ridges_gradient(aes(x = attribution, y = method_name, fill = after_stat(x)), 
+#                                scale = 2, rel_min_height = 0.01, alpha = 0.8) +
+#   facet_grid(cols = vars(feature), scales = "free",
+#              labeller = labeller(feature = c(X1 = "Temperature (normalized)", 
+#                                              X7 = "Weekday"))) +
+#   scale_fill_gradient2(low = "#3A3A98", high = "#832424", limits = c(-1.5, 1.5),
+#                        oob = scales::squish) +
+#   geom_vline(xintercept = 0, color = "gray40") +
+#   xlab("Attribution") + ylab("") +
+#   guides(fill = "none") +
+#   theme(text = element_text(family = "LModern_math", size = 14))
+# 
+# # Save plot
+# save_fig("Sec_3_bike_sharing", width = 8, height = 5)

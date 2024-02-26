@@ -40,8 +40,10 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
   layers <- get_dense_layers(p, n_units, n_layers, act.fct)
   
   # Adjust bias vector of last layer
-  layers[[length(layers)]]$bias <- layers[[length(layers)]]$bias * 0 +
-    median(dataset$train$y)
+  if (outcome_type == "regression") {
+    layers[[length(layers)]]$bias <- layers[[length(layers)]]$bias * 0 +
+      median(dataset$train$y)
+  }
   
   # Create torch dataloaders
   cli_progress_step("Creating data loaders...", "Crating data loaders!")
@@ -55,6 +57,8 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
     dataloader(batch_size = min(256, length(dataset$test$y)), shuffle = FALSE,
                num_workers = n_workers)
   
+  mode <- if (outcome_type == "regression") "min" else "max"
+  
   cli_progress_step("Fitting model...", "Fitting model!")
   fitted_model <- get_model %>%
     setup(
@@ -65,20 +69,20 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
     set_hparams(layers = layers, outcome_type = outcome_type) %>%
     set_opt_hparams(lr = 0.01) %>%
     fit(train_dl,
-        epochs = 300,
+        epochs = 200,
         valid_data = valid_dl,
         verbose = FALSE,
         callbacks = c(
           luz_callback_keep_best_model(
             monitor = "valid_loss",
-            mode = "min"),
+            mode = mode),
           luz_callback_early_stopping(
             monitor = "valid_loss",
-            patience = 30,
-            mode = "min"),
+            patience = 10,
+            mode = mode),
           luz_callback_lr_scheduler(
             torch::lr_step, 
-            step_size = 50,
+            step_size = 30,
             gamma = 0.2))
     )
   
@@ -97,18 +101,27 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
   error <- as.numeric(error[2,2])
   cli_text("Test loss: {signif(error)}")
   
-  # Calculate R²
-  preds <- fitted_model %>% predict(newdata = test_dl) %>% 
-    torch_squeeze() %>% as.numeric()
-  y <- test_dl$dataset$df[, "y"]
-  r_squared <- 1 - mean((preds - y)**2) / mean((y - mean(y))**2)
-  cli_text("R² value: {signif(r_squared)}")
+  if (outcome_type == "regression") {
+    # Calculate R²
+    preds <- fitted_model %>% predict(newdata = test_dl) %>% 
+      torch_squeeze() %>% as.numeric()
+    y <- test_dl$dataset$df[, "y"]
+    r_squared <- 1 - mean((preds - y)**2) / mean((y - mean(y))**2)
+    cli_text("R² value: {signif(r_squared)}")
+  } else if (outcome_type == "classification") {
+    preds <- fitted_model %>% predict(newdata = test_dl) %>% 
+      torch_squeeze() %>% as.numeric()
+    preds <- as.factor(ifelse(preds < 0.5, 0, 1))
+    y <- as.factor(test_dl$dataset$df[, "y"])
+    r_squared <- confusionMatrix(preds, reference = y)$byClass[["F1"]]
+  }
   
   list(model = fitted_model$model,
        error = error,
        r_squared_test = r_squared,
        r_squared_true = 1 - 1 / var(train_dl$dataset$df[, "y"]),
        num_inputs = p,
+       outcome_type = outcome_type,
        dataset = dataset)
 }
 

@@ -42,14 +42,14 @@ METHOD_DF <- list(
 
 # Continuous variables
 Prep_cont <- expand.grid(
-  n = 4000,
+  n = 3000,
   n_test = 1000,
   p = 12,
-  beta = 1,
+  beta = 0.75,
   mean = "range",
-  sample_type = "uniform",
-  dgp_type = c("linear", "pwlinear", "smooth", "nonlinear"),
-  scale_type = c("scale_none", "scale_zscore", "scale_maxabs" , "scale_minmax"), #"scale_zscore"
+  sample_type = "normal",
+  dgp_type = c("linear", "pwlinear", "nonlinear"), 
+  scale_type = c("scale_none", "scale_zscore", "scale_minmax"), 
   nn_units = c(256),
   nn_layers = c(3),
   nn_act.fct = c("relu")
@@ -57,14 +57,14 @@ Prep_cont <- expand.grid(
 
 # Binary/Categorical variables
 Prep_cat <- expand.grid(
-  n = 2000,
+  n = 1500,
   n_test = 1000,
   p = 12,
-  n_levels = c(4, 12, 20),
+  n_levels = c(4, 12),
   beta = 0.5,
   level_beta = "mixed",
   level_probs = "equal",
-  encode_type = c("encode_label", "encode_onehot", "encode_dummy", "encode_binary"),
+  encode_type = c("encode_label", "encode_onehot", "encode_dummy"),
   nn_units = c(128),
   nn_layers = c(3),
   nn_act.fct = c("relu")
@@ -80,30 +80,30 @@ Faith_cont <- expand.grid(
   beta = "grouped",
   mean = "random",
   sample_type = "normal",
-  dgp_type = c("linear", "pwlinear", "squared", "cos", "nonlinear"),
+  dgp_type = c("linear", "pwlinear", "nonlinear"),
   scale_type = c("scale_zscore"),
-  nn_units = c(128, 256),
-  nn_layers = c(3, 4),
+  nn_units = c(256),
+  nn_layers = c(3),
   nn_act.fct = c("relu")
 )
 
 # Binary/Categorical variables
 Faith_cat <- rbind(
   expand.grid( # Categorical variables
-    n = 2000,
+    n = 1500,
     n_test = 1000,
     p = 12,
-    n_levels = c(2, 10, 20),
+    n_levels = c(10),
     beta = "grouped",
     level_beta = "mixed",
     level_probs = "equal",
     encode_type = c("encode_onehot"),
-    nn_units = c(128, 256),
-    nn_layers = c(3, 4),
+    nn_units = c(128),
+    nn_layers = c(3),
     nn_act.fct = c("relu")
   ),
   expand.grid( # Binary variables
-    n = 2000,
+    n = 1500,
     n_test = 1000,
     p = 12,
     n_levels = c(2),
@@ -111,8 +111,8 @@ Faith_cat <- rbind(
     level_beta = "mixed",
     level_probs = "equal",
     encode_type = c("encode_label"),
-    nn_units = c(128, 256),
-    nn_layers = c(3, 4),
+    nn_units = c(128),
+    nn_layers = c(3),
     nn_act.fct = c("relu")
   )
 )
@@ -121,46 +121,46 @@ Faith_cat <- rbind(
 
 # Continuous variables
 Robust_p_cont <- expand.grid(
-  n = 3000,
+  n = 1500,
   n_test = 1000,
   p = seq(4, 30, by = 4),
   beta = "first_two",
   mean = "random",
   sample_type = "normal",
-  dgp_type = "linear_and_squared",
-  scale_type = "scale_zscore",
-  nn_units = c(128, 256),
-  nn_layers = c(3, 4),
+  dgp_type = "linear",
+  scale_type = c("scale_none", "scale_zscore", "scale_minmax"),
+  nn_units = c(256),
+  nn_layers = c(3),
   nn_act.fct = c("relu")
 )
 
 # Binary/Categorical variables
-Robust_p_cat <- expand.grid(
-  n = 2000,
-  n_test = 1000,
-  p = seq(4, 30, by = 4),
-  n_levels = c(4, 8, 12),
-  beta = "first_two",
-  level_beta = "mixed",
-  level_probs = "equal",
-  encode_type = "encode_onehot",
-  nn_units = c(128, 256),
-  nn_layers = c(3, 4),
-  nn_act.fct = c("relu")
-)
+Robust_p_cat <- expand.grid()
+  #n = 1500,
+  #n_test = 1000,
+  #p = seq(4, 30, by = 4),
+  #n_levels = c(4), #, 8, 12),
+  #beta = "first_two",
+  #level_beta = "mixed",
+  #level_probs = "equal",
+  #encode_type = "encode_onehot",
+  #nn_units = c(128),
+  #nn_layers = c(3),
+  #nn_act.fct = c("relu")
+#)
 
 # Robustness for correlated features
 Robust_corr <- expand.grid(
   n = 3000,
   n_test = 1000,
   p = 20,
-  corr = c(seq(0, 0.9, by = 0.1), 0.99), 
+  corr = c(seq(0, 0.9, by = 0.05), 0.95), 
   beta = "swapping",
   mean = "random",
   sample_type = "normal",
   dgp_type = "linear_and_squared_2",
   scale_type = "scale_zscore",
-  nn_units = c(128, 256),
-  nn_layers = c(3, 4),
+  nn_units = c(256),
+  nn_layers = c(3),
   nn_act.fct = c("relu")
 )

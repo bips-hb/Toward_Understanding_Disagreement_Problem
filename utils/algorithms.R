@@ -1,14 +1,15 @@
 ################################################################################
 #                               Algorithms
 ################################################################################
-apply_methods <- function(data, job, instance, compare_type = "cor", method_df = NULL) {
+apply_methods <- function(data, job, instance, compare_type = "cor", method_df = NULL,
+                          ignore_last_act = TRUE) {
   source(here("utils/methods.R"))
   
   cli_progress_step("Running feature attribution methods...", 
                     "Running feature attribution methods done!")
   
   res_list <- lapply(names(method_df), run_method, instance = instance,
-                     method_args = method_df)
+                     method_args = method_df, ignore_last_act = ignore_last_act)
   res_list <- unlist(res_list, recursive = FALSE)
   
   if (compare_type == "attributions") {
@@ -29,12 +30,24 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
   
   cli_end()
   
-  # Fit linear model as reference
-  model <- lm(y ~ ., data = as.data.frame(instance$dataset$train))
-  lm_mse <- mean((instance$dataset$test$y - 
-                    predict(model, 
-                            newdata = as.data.frame(instance$dataset$test)))**2)
-  lm_rsquared <- summary(model)$r.squared
+  # Fit linear or logistic model as reference
+  if (instance$outcome_type == "regression") {
+    model <- lm(y ~ ., data = as.data.frame(instance$dataset$train))
+    lm_mse <- mean((instance$dataset$test$y - 
+                      predict(model, 
+                              newdata = as.data.frame(instance$dataset$test)))**2)
+    lm_rsquared <- summary(model)$r.squared
+  } else if (instance$outcome_type == "classification") {
+    model <- glm(y~., family = binomial(link='logit'), 
+                 data = as.data.frame(instance$dataset$train))
+    
+    pred <- predict(model, newdata = as.data.frame(instance$dataset$test), 
+                    type = "response")
+    pred <- as.factor(ifelse(pred < 0.5, 0, 1))
+    lm_mse <- NA
+    lm_rsquared <- confusionMatrix(pred, reference = instance$dataset$test$y)$byClass[["F1"]]
+  }
+  
   
   data.table(res, model_error = instance$error, lm_error = lm_mse, lm_rsquared = lm_rsquared,
              r_squared = instance$r_squared_test, r_squared_true = instance$r_squared_true)
@@ -130,11 +143,12 @@ compare_raw <- function(result, instance) {
 ################################################################################
 #                             Helper functions
 ################################################################################
-run_method <- function(method_name, instance, method_args) {
+run_method <- function(method_name, instance, method_args, ignore_last_act = TRUE) {
   args <- method_args[[method_name]]
   wrapper_name <- paste0(tolower(method_name), "_wrapper")
   lapply(args, function(arg) {
     arg$instance <- instance
+    arg$ignore_last_act <- ignore_last_act
     do.call(wrapper_name, args = arg)
   })
 }

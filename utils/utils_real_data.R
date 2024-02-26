@@ -15,22 +15,7 @@ get_bike_sharing_ds <- function() {
   data$weathersit <- as.factor(as.character(data$weathersit))
   
   prepare_real_data(data, split = 0.2, y = 9, binary = c(2, 4), 
-                    categorical = c(1,3 ,5))
-}
-
-get_bike_sharing_ds <- function() {
-  data <- read.csv("utils/datasets/bike_sharing.csv")
-  data <- data[, c(-1, -2, -4, -5, -11, -14, -15)]
-  data$season <- as.factor(as.character(data$season))
-  #data$temp <- 47 * data$temp - 8
-  data$cnt <- data$cnt / 1000
-  data$holiday <- as.factor(as.character(data$holiday))
-  data$weekday <- as.factor(as.character(data$weekday))
-  data$workingday <- as.factor(as.character(data$workingday))
-  data$weathersit <- as.factor(as.character(data$weathersit))
-  
-  prepare_real_data(data, split = 0.2, y = 9, binary = c(2, 4), 
-                    categorical = c(1,3 ,5))
+                    categorical = c(1,3 ,5), outcome_type = "regression")
 }
 
 get_boston_housing_ds <- function() {
@@ -39,10 +24,11 @@ get_boston_housing_ds <- function() {
   
   data <- BostonHousing
   prepare_real_data(data, split = 0.2, y = 14, binary = c(4), 
-                    categorical = NULL)
+                    categorical = NULL, outcome_type = "regression")
 }
 
-prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL) {
+prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL,
+                              outcome_type = "regression") {
   # Order columns (outcome, numerical, binary, categorical)
   data <- cbind(data[, y, drop = FALSE], data[, -c(y, binary, categorical)], 
                 data[, binary, drop = FALSE], data[, categorical, drop = FALSE])
@@ -106,6 +92,7 @@ prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL)
     valid = list(x = data[val_idx, -1], y = data[val_idx, 1]),
     test = list(x = data[test_idx, -1], y = data[test_idx, 1]),
     cor_groups = c(seq_len(min(categorical) - 2), rep(categorical - 1, times)),
+    outcome_type = outcome_type,
     feat_names = feat_names
   )
 }
