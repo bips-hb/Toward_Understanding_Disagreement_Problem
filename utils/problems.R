@@ -87,22 +87,19 @@ syn_categorical <- function(data, job, n, p,
 
 # Real data problems -----------------------------------------------------------
 get_realdata <- function(data, job, ds_name = "bike_sharing",
-                         n_units = 256,
-                         n_layers = 3, 
-                         act.fct = "relu", ...) {
+                         nn_units = 256,
+                         nn_layers = 3, 
+                         nn_act.fct = "relu", ...) {
   
-  data <- switch(ds_name,
+  data <- switch(as.character(ds_name),
                  bike_sharing = get_bike_sharing_ds(),
                  boston_housing = get_boston_housing_ds(),
+                 german_credit = get_german_credit_ds(),
                  stop("Unknown dataset name: ", ds_name))
   
-  # Attributes
-  n_cpus <- 1
-  n_workers <- 0
-  
   # Train model
-  instance <- train_model(length(data$cor_groups), n_units, n_layers, data, 
-                          data$outcome_type, act.fct, n_cpus, n_workers)
+  instance <- train_model(length(data$cor_groups), nn_units, nn_layers, data, 
+                          data$outcome_type, nn_act.fct)
   
   instance
 }

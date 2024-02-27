@@ -10,12 +10,12 @@ set.seed(42)
 data.table::setDTthreads(10)
 
 # Global attributes
-n_cpus <- 10
+n_cpus <- 5
 n_reps <- 1
 reg_name <- "Real_Data"
 reg_dir <- here(file.path("registries", reg_name))
 required_pkgs <- c("innsight", "luz", "torch", "mvtnorm", "cli", "here", 
-                   "data.table", "mlbench")
+                   "data.table", "mlbench", "caret")
 
 # Create `batchtools` Registry
 if (!file.exists(here("registries"))) dir.create(here("registries"))
@@ -40,22 +40,25 @@ addAlgorithm(name = "Attribution", fun = apply_methods)
 
 # Experiments ------------------------------------------------------------------
 
-Datasets <- expand.grid(c(
-  global_attr,
-  ds_name = list(c("boston_housing", "bike_sharing"))
-))
+Datasets <- expand.grid(
+  nn_units = 256,
+  nn_layers = 3,
+  nn_act.fct = "relu",
+  ds_name = c("boston_housing", "bike_sharing", "german_credit")
+)
 
 prob_design <- list(Datasets = Datasets)
 
 # 
 # Define Algorithms and add Experiments
 #
-algo_design <- list(Attribution = expand.grid(compare_type = "attributions"))
+algo_design <- list(Attribution = expand.grid(compare_type = "attributions", 
+                                              method_df = list(METHOD_DF)))
 addExperiments(prob_design, algo_design, repls = n_reps)
 summarizeExperiments()
 
 # Test jobs --------------------------------------------------------------------
-#testJob(id = 1)
+#testJob(id = 3)
 
 # Submit -----------------------------------------------------------------------
 submitJobs(resources = list(name = reg_name,
@@ -66,45 +69,71 @@ waitForJobs()
 # Get results ------------------------------------------------------------------
 loadRegistry(reg_dir, writeable = FALSE, conf.file = here("utils/config.R"))
 res <- reduceResultsDataTable()
-jobPars <- batchtools::flatten(getJobPars(ids = res$job.id))
+jobPars <- batchtools::flatten(getJobPars(ids = res$job.id)[, -c("algo.pars")])
 
 # Correlation results
 jobPars <- jobPars[rep(seq_len(nrow(jobPars)), unlist(lapply(res$result, nrow))), ]
 result <- cbind(jobPars, rbindlist(res$result))
-keep_methods <- c("SHAP", "DeepSHAP (reveal-cancel)", "DeepLift (rescale, zeros)", 
-                  "DeepLift (reveal-cancel, mean)",
-                  "ExpectedGradient", "IntegratedGradient (mean)",
-                  "IntegratedGradient (zeros)", "Gradient x Input", "Gradient",
-                  "LRP (alpha-beta, 1.5)", "LRP (alpha-beta, 1)", "LRP (simple, 0)")
-result <- result[method_name %in% keep_methods]
 
 res_cor <- lapply(unique(result$job.id), function(i) {
   res <- result[job.id == i]
   names <- unique(res$method_name)
   a <- expand.grid(names, names)
-  mat <- sapply(seq_len(nrow(names_grid)), function(k) {
+  mat <- sapply(seq_len(nrow(a)), function(k) {
     res_feat <- lapply(unique(res$feature), function(feat) {
-      cor(res[method_name == names_grid[k, 1] & feature == feat]$attribution,
-          res[method_name == names_grid[k, 2] & feature == feat]$attribution)
+      cor(
+        res[method_name == a[k, 1] & feature == feat]$attribution,
+        res[method_name == a[k, 2] & feature == feat]$attribution
+      )
     })
-    mean(unlist(res_feat))
+    list(mean = mean(unlist(res_feat)), sd = sd(unlist(res_feat)))
   })
-  cbind(a, cor = mat, dataset = unique(res$ds_name), act.fct = unique(res$act.fct))
+  cbind(a, 
+        cor = unlist(mat["mean", ]), 
+        cor_sd = unlist(mat["sd", ]), 
+        dataset = unique(res$ds_name), 
+        act.fct = unique(res$nn_act.fct))
 })
 
 res_cor <- do.call("rbind", args = res_cor)
+res_cor$paper_grp <- add_paper_grp(res_cor$Var1)
+res_cor$paper_grp2 <- add_paper_grp(res_cor$Var2)
+res_cor <- as.data.table(res_cor)
 
 # Create plots -----------------------------------------------------------------
 library(ggplot2)
 library(cowplot)
+library(envalysis)
 library(ggthemes)
 
+create_heatmap <- function(ds_name, act.fct) {
+  ggplot(res_cor[dataset == ds_name & act.fct == act.fct]) +
+    geom_raster(aes(x = Var1, y = Var2, fill = cor)) +
+    #geom_point(aes(x = Var1, y = Var2, size = cor_sd)) +
+    facet_grid(cols = vars(paper_grp), rows = vars(paper_grp2), 
+               scales = "free", space = "free", switch = "y") +
+    scale_fill_gradient2(low = scales::muted("blue"), high = scales::muted("red")) + 
+                         #limits = c(-1, 1)) +
+    theme_publish(base_size = 8, base_family = "serif") +
+    guides(fill = "none", size = "none") + 
+    labs(title = ds_name, subtitle = act.fct, x = NULL, y = NULL) +
+    scale_x_discrete(guide = guide_axis(n.dodge=3)) +
+    scale_size(range = c(0, 4))
+}
 
-ggplot(res_cor) +
-  geom_raster(aes(x = Var1, y = Var2, fill = cor)) +
-  facet_grid(cols = vars(dataset), rows = vars(act.fct)) +
-  scale_fill_gradient2(low = scales::muted("blue"), high = scales::muted("red")) +
-  theme(axis.text.x = element_text(angle = 45, vjust= 0.8))
+all_ds <- unique(res_cor$dataset)
+all_acts <- unique(res_cor$act.fct)
+plots <- NULL
+
+grid <- expand.grid(act.fct = as.character(all_acts), ds_name = as.character(all_ds))
+
+for (i in seq_len(nrow(grid))) {
+  plots <- append(plots, list(create_heatmap(grid$ds_name[i], grid$act.fct[i])))
+}
+
+cowplot::plot_grid(plotlist = plots)
+
+
 ggsave("figures/real_data.pdf", width = 20, height = 20)
 
 # Model error

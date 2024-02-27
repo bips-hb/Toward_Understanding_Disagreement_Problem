@@ -15,7 +15,37 @@ get_bike_sharing_ds <- function() {
   data$weathersit <- as.factor(as.character(data$weathersit))
   
   prepare_real_data(data, split = 0.2, y = 9, binary = c(2, 4), 
-                    categorical = c(1,3 ,5), outcome_type = "regression")
+                    categorical = c(1, 3, 5), outcome_type = "regression")
+}
+
+get_german_credit_ds <- function(scale_type = "scale_zscore") {
+  library("caret")
+  data("GermanCredit")
+  
+  data <- GermanCredit
+  
+  if (scale_type == "scale_zscore") {
+    scale_fun <- function(x) (x - mean(x)) / sd(x)
+  } else if (scale_type == "scale_minmax") {
+    scale_fun <- function(x) (x - min(x)) / (max(x) - min(x))
+  }
+  
+  data$Duration <- scale_fun(data$Duration)
+  data$Amount <- scale_fun(data$Amount)
+  data$Age <- scale_fun(data$Age)
+  
+  instance <- prepare_real_data(data, split = 0.2, y = 10, binary = NULL, 
+                                categorical = NULL, outcome_type = "classification")
+  
+  feat_names <- unlist(lapply(instance$feat_names, 
+                              function(x) strsplit(x, ".", fixed = TRUE)[[1]][1]))
+  cor_grp <- match(feat_names, unique(feat_names))
+  feat_names <- unique(feat_names)
+  
+  instance$feat_names <- feat_names
+  instance$cor_groups <- cor_grp
+  
+  instance
 }
 
 get_boston_housing_ds <- function() {
@@ -72,7 +102,13 @@ prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL,
     cat_vars <- list()
   }
   
-  data <- as.matrix(data)
+  if (outcome_type == "classification") {
+    data <- data.frame(
+      y = as.factor(as.numeric(as.factor(data[, 1])) - 1), 
+      as.matrix(data[, -1]))
+  } else {
+    data <- data.frame(as.matrix(data))
+  }
   
   # Train-Val-Test split
   test_idx <- seq(from = 0, to = as.integer(nrow(data) * split))
@@ -82,7 +118,7 @@ prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL,
                    to = nrow(data))
   
   # Add categorical data
-  data <- cbind(data, cat_data)
+  data <- if (!is.null(cat_data)) cbind(data, cat_data) else data
   rownames(data) <- NULL
   times <- unlist(lapply(cat_vars, ncol))
   times <- if (is.null(times)) 0 else times

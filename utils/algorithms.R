@@ -45,7 +45,7 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
                     type = "response")
     pred <- as.factor(ifelse(pred < 0.5, 0, 1))
     lm_mse <- NA
-    lm_rsquared <- confusionMatrix(pred, reference = instance$dataset$test$y)$byClass[["F1"]]
+    lm_rsquared <- confusionMatrix(pred, reference = as.factor(as.numeric(instance$dataset$test$y) - 1))$byClass[["F1"]]
   }
   
   

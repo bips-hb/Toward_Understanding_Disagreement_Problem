@@ -28,7 +28,7 @@ get_torch_dataset <- dataset(
 
 # Model training ---------------------------------------------------------------
 train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "relu",
-                        n_cpus = 1, n_workers = 1) {
+                        n_cpus = 1, n_workers = 0) {
   # Set seed for reproducibility
   #set.seed(42)
   torch_manual_seed(42)
@@ -57,8 +57,6 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
     dataloader(batch_size = min(256, length(dataset$test$y)), shuffle = FALSE,
                num_workers = n_workers)
   
-  mode <- if (outcome_type == "regression") "min" else "max"
-  
   cli_progress_step("Fitting model...", "Fitting model!")
   fitted_model <- get_model %>%
     setup(
@@ -69,20 +67,20 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
     set_hparams(layers = layers, outcome_type = outcome_type) %>%
     set_opt_hparams(lr = 0.01) %>%
     fit(train_dl,
-        epochs = 200,
+        epochs = 300,
         valid_data = valid_dl,
         verbose = FALSE,
         callbacks = c(
           luz_callback_keep_best_model(
             monitor = "valid_loss",
-            mode = mode),
+            mode = "min"),
           luz_callback_early_stopping(
             monitor = "valid_loss",
-            patience = 10,
-            mode = mode),
+            patience = 40,
+            mode = "min"),
           luz_callback_lr_scheduler(
             torch::lr_step, 
-            step_size = 30,
+            step_size = 50,
             gamma = 0.2))
     )
   
@@ -114,6 +112,7 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
     preds <- as.factor(ifelse(preds < 0.5, 0, 1))
     y <- as.factor(test_dl$dataset$df[, "y"])
     r_squared <- confusionMatrix(preds, reference = y)$byClass[["F1"]]
+    cli_text("F1-score: {signif(r_squared)}")
   }
   
   list(model = fitted_model$model,
