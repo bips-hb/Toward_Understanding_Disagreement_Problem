@@ -1,28 +1,26 @@
 ################################################################################
-#                                 Simulations
+#
+#           SECTION 4: Do Feature Attribution Methods Attribute?
+#
 ################################################################################
 library("batchtools")
 library("data.table")
 library("here")
-library("ggplot2")
-library("cowplot")
-library("ggthemes")
 
 # Set seed
 set.seed(42)
 data.table::setDTthreads(10)
 
 # Global attributes
-n_cpus <- 20
-n_reps <- 10
-reg_name <- "Simulations_final2"
+n_cpus <- 35
+reg_name <- "Sec_4_Simulations"
 reg_dir <- here(file.path("registries", reg_name))
 required_pkgs <- c("innsight", "luz", "torch", "mvtnorm", "cli", "here", 
                    "data.table")
 
-# Create `batchtools` Registry
+# Create `batchtools` registry
 if (!file.exists(here("registries"))) dir.create(here("registries"))
-unlink(reg_dir, recursive = TRUE) # delete old simulations
+#unlink(reg_dir, recursive = TRUE) # delete old simulations
 makeExperimentRegistry(
   file.dir = reg_dir,
   conf.file = here("utils/config.R"),
@@ -36,11 +34,10 @@ makeExperimentRegistry(
 source(here("utils/utils_simulation.R"))
 
 ################################################################################
-#                       Simulation: Preprocessing
+#                     4.1 Impact of Data Preprocessing
 ################################################################################
 
-# Select methods
-# (remove model-agnostic approaches)
+# Select methods (remove SHAP)
 prep_method_df <- METHOD_DF
 prep_method_df[["SHAP"]] <- NULL
 
@@ -61,7 +58,7 @@ Prep_algo_design <- list(
     method_df = list(prep_method_df)))
 
 ################################################################################
-#                       Simulation: Faithfulness
+#                       4.2 Faithfulness of Effects
 ################################################################################
 
 # Apply all methods
@@ -84,44 +81,39 @@ Faith_algo_design <- list(
     method_df = list(faith_method_df)))
 
 ################################################################################
-#                       Simulation: Robustness
+#               4.3 Beyond Feature Attribution Toward Importance
 ################################################################################
 
 # Select methods
-# (remove model-agnostic approaches)
-robust_method_df <- METHOD_DF
-robust_method_df[["SHAP"]] <- NULL
+beyondA_method_df <- METHOD_DF
 
 # Problems --------------------------------------------------------------------- 
-addProblem(name = "Robust_p_cont", fun = syn_numerical, seed = 46)
-addProblem(name = "Robust_p_cat", fun = syn_categorical, seed = 47)
-addProblem(name = "Robust_corr", fun = syn_numerical, seed = 48)
+addProblem(name = "BeyondA_cont", fun = syn_numerical, seed = 46)
+addProblem(name = "BeyondA_cat", fun = syn_categorical, seed = 47)
 
 # Algorithms -------------------------------------------------------------------
-addAlgorithm(name = "Uninformative", fun = apply_methods)
+addAlgorithm(name = "F1_score", fun = apply_methods)
 
 # Combine all to the problem design
-Robust_prob_design <- list(Robust_p_cont = Robust_p_cont, 
-                           Robust_p_cat = Robust_p_cat)
+BeyondA_prob_design <- list(BeyondA_cont = BeyondA_cont, BeyondA_cat = BeyondA_cat)
 
 # Define Algorithms and add Experiments
-Robust_algo_design <- list(
-  Uninformative = expand.grid(compare_type = "uninformative", 
-                              method_df = list(robust_method_df)))
+BeyondA_algo_design <- list(
+  F1_score = expand.grid(compare_type = "F1_score",
+                         method_df = list(beyondA_method_df)))
 
 ################################################################################
 #                         Add all experiments 
-###############################################################################
+################################################################################
 
-#addExperiments(Prep_prob_design, Prep_algo_design, repls = n_reps)
-#addExperiments(Faith_prob_design, Faith_algo_design, repls = n_reps)
-addExperiments(Robust_prob_design, Robust_algo_design, repls = n_reps)
-addExperiments(list(Robust_corr = Robust_corr), Robust_algo_design, repls = n_reps)
+addExperiments(Prep_prob_design, Prep_algo_design, repls = 200)
+addExperiments(Faith_prob_design, Faith_algo_design, repls = 200)
+addExperiments(BeyondA_prob_design, BeyondA_algo_design, repls = 500)
 
 summarizeExperiments()
 
 # Test jobs --------------------------------------------------------------------
-#testJob(id = 277)
+testJob(id = 1)
 
 # Submit -----------------------------------------------------------------------
 submitJobs(resources = list(name = reg_name,
@@ -130,13 +122,15 @@ submitJobs(resources = list(name = reg_name,
 waitForJobs()
 
 ################################################################################
-#                     Show results and create outputs
+#                               Create figures
 ################################################################################
 library("ggplot2")
 library("cowplot")
-library("ggthemes")
+library("ggsci")
+library("envalysis")
 library("sysfonts")
 library("showtext")
+library("kableExtra")
 
 # Load LaTeX font (Latin modern), only relevant for setting the fonts as in the
 # paper, but requires the latinmodern-math font
@@ -145,47 +139,58 @@ showtext_auto()
 
 source(here("utils/utils_figures.R"))
 
-# Set ggplot2 theme
-theme_set(
-  theme_bw(base_size = 18, base_family = "LModern_math", base_line_size = 1) +
-    theme(
-      axis.title = element_text(face = "bold"),
-      strip.text = element_text(face = "bold", size = 16),
-      axis.text.y = element_text(size = 13)
-    )
-)
-
 # Load and prepare results from registry ---------------------------------------
 res <- get_and_prepare_results(reg_dir, here("utils/config.R"))
-res_error <- res$res_error
 
-# Preprocessing ----------------------------------------------------------------
+# Save results
+saveRDS(res, file = here("results.rds"))
 
-# Crate and save the model error plots
-create_modelerror_fig(res_error[problem %in% c("Prep_cont", "Prep_cat")], "Prep")
-
-# Create results plot
+# 4.1 Impact of Data Preprocessing ---------------------------------------------
 res_prep <- res$res_corr[problem %in% c("Prep_cont", "Prep_cat")]
 create_preprocess_fig(res_prep)
 
-# Faithfulness -----------------------------------------------------------------
-
-# Crate and save the model error plots
-create_modelerror_fig(res_error[problem %in% c("Faith_cont", "Faith_cat")], "Faith")
-
-# Create results plot
+# 4.2 Faithfulness of Effects --------------------------------------------------
 res_faith <- res$res_corr[problem %in% c("Faith_cont", "Faith_cat")]
 create_faithfulness_fig(res_faith)
 
-# Robustness: Number of uninformative variables --------------------------------
+# 4.3 Beyond Feature Attribution -----------------------------------------------
+res_beyond <- res$res_f1[problem %in% c("BeyondA_cont", "BeyondA_cat")]
+create_beyond_attribution_fig(res_beyond)
 
-# Crate and save the model error plots
-create_modelerror_fig(res_error[problem %in% c("Robust_p_cont", "Robust_p_cat")], "Robust")
+# Appendix: Show model performance ---------------------------------------------
 
-# Create results plot
-res_robust_p <- res$res_uninform[problem %in% c("Robust_p_cont")]
-create_robustness_p_fig(res_robust_p)
+# Create Table 1
+res_tab <- res$res_error[problem %in% c("Prep_cont", "Faith_cont")]
+res_tab_linear <- res_tab[, .(r2 = paste0(round(mean(error_ref), digits = 2), " ± ", round(sd(error_ref), digits = 2))),
+                          by = c("data_type", "problem")]
+res_tab <- res_tab[, .(r2 = paste0(round(mean(error), digits = 2), " ± ", round(sd(error), digits = 2))), 
+                   by = c("preprocess_type", "data_type", "problem")]
+res_tab <- dcast(res_tab, problem + preprocess_type ~ data_type, value.var = "r2")
+res_tab_linear <- dcast(res_tab_linear, problem ~ data_type, value.var = "r2")
+res_tab_linear$preprocess_type <- "(Linear model)"
+res_tab <- rbind(res_tab, res_tab_linear)
+res_tab <- res_tab[c(2, 3, 4, 6, 1, 5), ]
+res_tab <- kbl(res_tab, "pipe", booktabs = TRUE) %>%
+  kable_classic() %>%
+  add_header_above(c(" " = 1, " " = 1, "Effect type" = 3)) %>%
+  collapse_rows(columns = 1, valign = "top")
 
+save_kable(res_tab, file = here("figures/Sec_App_table_1.html"))
 
-res_robust_corr <- res$res_uninform[problem %in% c("Robust_corr", "Robust_corr")]
-create_robustness_corr_fig(res_robust_corr)
+# Create Table 2
+res_tab <- res$res_error[problem %in% c("Prep_cat", "Faith_cat")]
+res_tab_linear <- res_tab[, .(r2 = paste0(round(mean(error_ref), digits = 2), " ± ", round(sd(error_ref), digits = 2))),
+                          by = c("preprocess_type", "problem")]
+res_tab <- res_tab[, .(r2 = paste0(round(mean(error), digits = 2), " ± ", round(sd(error), digits = 2))), 
+                   by = c("preprocess_type", "data_type", "problem")]
+res_tab <- dcast(res_tab, problem + data_type ~ preprocess_type, value.var = "r2")
+res_tab_linear <- dcast(res_tab_linear, problem ~ preprocess_type, value.var = "r2")
+res_tab_linear$data_type <- "(Linear model)"
+res_tab <- rbind(res_tab, res_tab_linear)
+res_tab <- res_tab[c(3, 4, 6, 1, 2, 5), ]
+res_tab <- kbl(res_tab, "pipe", booktabs = TRUE) %>%
+  kable_classic() %>%
+  add_header_above(c(" " = 1, " " = 1, "Encoding" = 4)) %>%
+  collapse_rows(columns = 1, valign = "top")
+
+save_kable(res_tab, file = here("figures/Sec_App_table_2.html"))

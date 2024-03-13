@@ -1,8 +1,8 @@
 ################################################################################
 #                               Algorithms
 ################################################################################
-apply_methods <- function(data, job, instance, compare_type = "cor", method_df = NULL,
-                          ignore_last_act = TRUE) {
+apply_methods <- function(data, job, instance, compare_type = "correlation", 
+                          method_df = NULL, ignore_last_act = TRUE) {
   source(here("utils/methods.R"))
   
   cli_progress_step("Running feature attribution methods...", 
@@ -18,11 +18,11 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
   } else if (compare_type == "correlation") {
     res <- lapply(res_list, compare_corelation, instance = instance)
     res <- do.call("rbind", args = res)
-  } else if (compare_type == "uninformative") {
-    res <- lapply(res_list, compare_uninformative, instance = instance)
+  } else if (compare_type == "F1_score") {
+    res <- lapply(res_list, compare_f1_score, instance = instance)
     res <- do.call("rbind", args = res)
-  } else if (compare_type == "global") {
-    res <- lapply(res_list, compare_global, instance = instance)
+  } else if (compare_type == "raw_matrix") {
+    res <- lapply(res_list, compare_raw_matrix, instance = instance)
     res <- do.call("rbind", args = res)
   }
   
@@ -33,10 +33,9 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
   # Fit linear or logistic model as reference
   if (instance$outcome_type == "regression") {
     model <- lm(y ~ ., data = as.data.frame(instance$dataset$train))
-    lm_mse <- mean((instance$dataset$test$y - 
-                      predict(model, 
-                              newdata = as.data.frame(instance$dataset$test)))**2)
-    lm_rsquared <- summary(model)$r.squared
+    preds <- predict(model, newdata = as.data.frame(instance$dataset$test))
+    error_metric_ref <- mean((instance$dataset$test$y - preds)**2)
+    error_ref <- summary(model)$r.squared
   } else if (instance$outcome_type == "classification") {
     model <- glm(y~., family = binomial(link='logit'), 
                  data = as.data.frame(instance$dataset$train))
@@ -44,13 +43,17 @@ apply_methods <- function(data, job, instance, compare_type = "cor", method_df =
     pred <- predict(model, newdata = as.data.frame(instance$dataset$test), 
                     type = "response")
     pred <- as.factor(ifelse(pred < 0.5, 0, 1))
-    lm_mse <- NA
-    lm_rsquared <- confusionMatrix(pred, reference = as.factor(as.numeric(instance$dataset$test$y) - 1))$byClass[["F1"]]
+    error_metric_ref <- mean(pred == instance$dataset$test$y)
+    error_ref <- confusionMatrix(pred, reference = as.factor(as.numeric(instance$dataset$test$y) - 1))$byClass[["F1"]]
   }
   
   
-  data.table(res, model_error = instance$error, lm_error = lm_mse, lm_rsquared = lm_rsquared,
-             r_squared = instance$r_squared_test, r_squared_true = instance$r_squared_true)
+  data.table(res, 
+             error_metric = instance$error_metric, 
+             error_metric_ref = error_metric_ref, 
+             error_ref = error_ref,
+             error = instance$error, 
+             r_squared_true = instance$r_squared_true)
 }
 
 ################################################################################
@@ -78,34 +81,27 @@ compare_corelation <- function(result, instance) {
                 function(i) cor_fun(res[, i], instance$dataset$imp_local[, i], i)))
   
   data.table(cor = cor_local, 
+             exp_mean = colMeans(res), 
              feature = paste0("X", seq_len(ncol(res))),
              result$hyperp)
 }
 
-compare_uninformative <- function(result, instance) {
-  
-  # Get informative features
-  info_idx <- which(instance$beta != 0)
-  
-  # Combine correlated features
+compare_f1_score <- function(result, instance) {
   cor_groups <- instance$dataset$cor_groups
   res <- combine_features(result$result, cor_groups, FUN = base::identity)
+  p <- ncol(res)
   
-  perc_uninform <- mean(rowSums(abs(res[, -info_idx])) / rowSums(abs(res)), 
-                        na.rm = TRUE)
-
-  data.table(percent_to_uninformative = perc_uninform, result$hyperp)
-}
-
-compare_global <- function(result, instance) {
-  # Combine correlated features
-  cor_groups <- instance$dataset$cor_groups
-  res <- combine_features(result$result, cor_groups, FUN = base::identity)
+  # Calculate rankings
+  pred <- (t(apply(abs(res), 1, rank, ties.method = "random")) > p %/% 2) * 1
+  ref <- factor((instance$beta != 0) * 1)
   
-  data.table(auc = auc((instance$beta == 0) * 1, (rank(colMeans(abs(res))) > 10) * 1),
-             result$hyperp)
+  prec <- apply(pred, 1, function(a) caret::precision(factor(a), ref))
+  rec <- apply(pred, 1, function(a) caret::recall(factor(a), ref))
+  f1 <- apply(pred, 1, function(a) caret::F_meas(factor(a), ref))
+  
+  data.table(f1_score = mean(f1), precision = mean(prec),
+             recall = mean(rec), result$hyperp)
 }
-
 
 compare_raw <- function(result, instance) {
   
@@ -140,6 +136,13 @@ compare_raw <- function(result, instance) {
   cbind(res, result$hyperp)
 }
 
+compare_raw_matrix <- function(result, instance) {
+  cor_groups <- instance$dataset$cor_groups
+  res <- combine_features(result$result, cor_groups, FUN = base::identity)
+  
+  cbind(res, result$hyperp)
+}
+
 ################################################################################
 #                             Helper functions
 ################################################################################
@@ -151,6 +154,13 @@ run_method <- function(method_name, instance, method_args, ignore_last_act = TRU
     arg$ignore_last_act <- ignore_last_act
     do.call(wrapper_name, args = arg)
   })
+}
+
+combine_features <- function(res_1, cat_feat, FUN = identity) {
+  if (!is.matrix(res_1)) res_1 <- matrix(res_1, nrow = 1)
+  res <- lapply(seq_len(max(cat_feat)), 
+                function(i) rowSums(FUN(res_1[, which(cat_feat == i), drop = FALSE])))
+  do.call("cbind", args = res)
 }
 
 METHOD_LEVELS <- c(

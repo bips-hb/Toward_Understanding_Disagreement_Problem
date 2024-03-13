@@ -3,7 +3,7 @@
 ################################################################################
 
 get_dataset <- function(sample_fun, dgp_fun, n, n_test, preprocess_type = "scale_none",
-                        n_levels = NULL, outcome_type = "regression") {
+                        n_levels = NULL, outcome_type = "regression", y_normalization = FALSE) {
   cli_progress_step("Creating dataset...", "Dataset created!")
   # Sample data
   train_data <- as.matrix(sample_fun(n))
@@ -23,8 +23,15 @@ get_dataset <- function(sample_fun, dgp_fun, n, n_test, preprocess_type = "scale
   
   # Define outcome function
   if (outcome_type == "regression") {
+    if (y_normalization) {
+      y_mean <- mean(dgp_fun(train_data)$lp)
+      y_sd <- sd(dgp_fun(train_data)$lp)
+    } else {
+      y_mean <- 0
+      y_sd <- 1
+    }
     out_fun <- function(data, n) {
-      dgp_fun(data)$lp + rnorm(n)
+      y <- (dgp_fun(data)$lp - y_mean) / y_sd + rnorm(n)
     }
   } else if (outcome_type == "classification") {
     center_point <- median(dgp_fun(train_data)$lp)
@@ -68,15 +75,11 @@ get_dataset <- function(sample_fun, dgp_fun, n, n_test, preprocess_type = "scale
 get_dgp_fun <- function(type, beta, beta0 = 0, n_levels = NULL, level_beta = NULL) {
   switch (as.character(type),
           linear = function(x) dgp_linear(x, beta = beta, beta0 = beta0),
-          linear_and_squared = function(x) dgp_lin_squared(x, beta = beta, beta0 = beta0),
-          linear_and_squared_2 = function(x) dgp_lin_squared(x, beta = beta, beta0 = beta0, squared_idx = 10:20),
           pwlinear = function(x) dgp_pwlinear(x, beta = beta, beta0 = beta0),
-          squared = function(x) dgp_squared(x, beta = beta, beta0 = beta0),
           smooth = function(x) dgp_smooth(x, beta = beta, beta0 = beta0),
-          gaussian = function(x) dgp_gaussian(x, beta = beta, beta0 = beta0),
           cos = function(x) dgp_cos(x, beta = beta, beta0 = beta0),
           nonlinear = function(x) dgp_nonlinear(x, beta = beta, beta0 = beta0),
-          categorical = function(x) dgp_categorical(x, beta = beta, n_levels = n_levels,
+          categorical = function(x) dgp_categorical(x, beta = beta,beta0 = beta0, n_levels = n_levels,
                                                     level_beta = level_beta),
           stop("Unknown data generating process: '", type, "'")
   )
@@ -87,30 +90,20 @@ dgp_linear <- function(x, beta, beta0) {
   list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
-dgp_lin_squared <- function(x, beta, beta0, squared_idx = 2) {
-  x[, squared_idx] <- cos(x[, squared_idx]*0.4 *pi) * exp(-(0.7 * x[, squared_idx])^2) * 1.768237
-  effects <- t(t(x) * beta)
-  list(lp = rowSums(effects) + beta0, effects = effects)
-}
 
 dgp_pwlinear <- function(x, beta, beta0) {
-  res <- (
-    (x < -2.75) * (-1) +
-    (x >= -2.75 & x < -2.25) * (x + 1.75) +
-    (x >= -2.25 & x < -1.75) * (-0.5) +
-    (x >= -1.75 & x < -1.25) * (x + 1.25) +
-    (x >= -1.25 & x < -0.75) * 0 +
-    (x >= -0.75 & x < -0.25) * (x + 0.75) +
-    (x >= -0.25 & x < 0.25) * 0.5 +
-    (x >= 0.25 & x < 0.75) * (-x + 0.75) +
-    (x >= 0.75 & x < 1.25) * 0 +
-    (x >= 1.25 & x < 1.75) * (-x + 1.25) +
-    (x >= 1.75 & x < 2.25) * (-0.5) +
-    (x >= 2.25 & x < 2.75) * (-x + 1.75) +
-    (x >= 2.75) * (-1)) * 2
-    
-    
-  effects <- t(t(res) * beta)
+  # Define piece-wise linear function
+  pw_x <- c(-6.25, -5.75, -5.25, -4.75, -4.25, -3.75, -3.25, -2.75, -2.25, -1.75, 
+            -1.25, -0.75, -0.25, 0.25, 0.75, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 
+            4.25, 4.75, 5.25, 5.75, 6.25)
+  pw_y <-c(-0.25, -0.15, -1.05, -1.15, -2.05, -2.25, -2.6, -2.6, -2.25, -2.15, 
+           -1.25, -1.15, -0.25, -0.25, -1.15, -1.25, -2.15, -2.25, -2.6, -2.6, 
+           -2.25, -2.05, -1.15, -1.05, -0.15, -0.25) + 1.5
+  pw_linear <- stats::approxfun(pw_x, pw_y, method = "linear", rule = 2)
+  
+  x <- apply(as.matrix(x), c(2), pw_linear)
+  
+  effects <- t(t(x) * beta)
   list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
@@ -118,16 +111,6 @@ dgp_smooth <- function(x, beta, beta0) {
   
   res <- cos(x*0.4 *pi) * exp(-(0.7*x)^2) * 1.768237
   effects <- t(t(res) * beta)
-  list(lp = rowSums(effects) + beta0, effects = effects)
-}
-
-dgp_squared <- function(x, beta, beta0) {
-  effects <- t(t(x**2) * beta)
-  list(lp = rowSums(effects) + beta0, effects = effects)
-}
-
-dgp_gaussian <- function(x, beta, beta0) {
-  effects <- t(t(exp(-x**2)) * 2 * beta)
   list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
@@ -139,19 +122,20 @@ dgp_cos <- function(x, beta, beta0) {
 dgp_nonlinear <- function(x, beta, beta0) {
   
   effects <- ifelse(abs(x) < qnorm(0.75), 1, -1)
+  effects <- ifelse(abs(x) < 1.5, effects, sign(x) * 0.05 *(x**2 - 1.5**2) - 1) + 0.25
   effects <- t(t(effects) * beta)
   
   list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
-dgp_categorical <- function(x, beta, n_levels, level_beta) {
+dgp_categorical <- function(x, beta, beta0, n_levels, level_beta) {
   p <- ncol(x)
   beta <- rep(beta, each = n_levels) * level_beta
   effects <- t(t(encode_onehot(x, n_levels)) * beta)
   dim(effects) <- c(nrow(effects), n_levels, p)
   effects <- apply(effects, c(1,3), sum)
   
-  list(lp = rowSums(effects), effects = effects)
+  list(lp = rowSums(effects) + beta0, effects = effects)
 }
 
 ################################################################################
@@ -163,8 +147,6 @@ get_sample_fun <- function(type, p, mean = rep(0, p), sigma = diag(p),
           normal = function(n) sample_normal(n, p = p, mean = mean, sigma = sigma),
           mixednormal = function(n) sample_mixednormal(n, p = p, mean = mean, sigma  = sigma),
           uniform = function(n) sample_uniform(n, p = p, mean = mean),
-          weibull = function(n) sample_weibull(n, p = p, mean = mean),
-          exponential = function(n) sample_exp(n, p = p, mean = mean),
           categorical = function(n) sample_categorical(n, p = p, n_levels = n_levels,
                                                        level_probs = level_probs),
           stop("Unknown sample function: '", type, "'")
@@ -189,15 +171,6 @@ sample_uniform <- function(n, p, mean) {
   matrix(runif(n * p, min = -1, max = 1) + mean, nrow = n, byrow = TRUE)
 }
 
-sample_exp <- function(n, p, mean) {
-  matrix(rexp(n * p) + mean - 1, nrow = n, byrow = TRUE)
-}
-
-sample_weibull <- function(n, p, mean) {
-  matrix(rweibull(n * p, shape = 1.5) + mean - gamma(1 + 1 / 1.5), 
-         nrow = n, byrow = TRUE)
-}
-
 sample_categorical <- function(n, p, n_levels, level_probs) {
   values <- sample(LETTERS[1:n_levels], n * p, 
                    replace = TRUE, 
@@ -212,7 +185,6 @@ sample_categorical <- function(n, p, n_levels, level_probs) {
 get_preprocess_fun <- function(type, scale_args = NULL, n_levels = NULL) {
   switch (as.character(type),
           scale_minmax = function(x) scale_min_max(x, scale_args = scale_args),
-          scale_robust_minmax = function(x) scale_robust_min_max(x, scale_args = scale_args),
           scale_maxabs = function(x) scale_max_abs(x, scale_args = scale_args),
           scale_zscore = function(x) scale_zscore(x, scale_args = scale_args),
           scale_normalize = function(x) scale_normalize(x, scale_args = scale_args),
@@ -222,6 +194,7 @@ get_preprocess_fun <- function(type, scale_args = NULL, n_levels = NULL) {
           encode_effect = function(x) encode_effect(x, n_levels = n_levels),
           encode_label = function(x) encode_label(x, n_levels = n_levels),
           encode_binary = function(x) encode_binary(x, n_levels = n_levels),
+          uninformative = function(x) encode_uninformative(x, n_levels = n_levels),
           stop("Unknown preprocess function: '", type, "'")
   )
 }
@@ -241,10 +214,6 @@ get_scale_args <- function(x) {
 
 scale_min_max <- function(x, scale_args) {
   t((t(x) - scale_args$min) / (scale_args$max - scale_args$min))
-}
-
-scale_robust_min_max <- function(x, scale_args) {
-  t((t(x) - scale_args$min) / scale_args$iqr)
 }
 
 scale_max_abs <- function(x, scale_args) {
@@ -333,3 +302,15 @@ encode_binary <- function(x, n_levels) {
   res <- t(apply(x, c(1, 2), fun, n_levels = n_levels, simplify = FALSE))
   matrix(unlist(res), nrow = nrow(x), byrow = TRUE)
 }
+
+encode_uninformative <- function(x, n_levels) {
+  x_cont <- x[, c(1,2)]
+  x_cat <- x[, -c(1,2)]
+  mode(x_cont) <- "double"
+  
+  as.matrix(cbind(x_cont, encode_onehot(x_cat, n_levels = n_levels)))
+}
+
+
+
+

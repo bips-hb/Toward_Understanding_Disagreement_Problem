@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-# Definition of the methods to be applied --------------------------------------
+# Hyperparameters of the feature attribution methods ---------------------------
 METHOD_DF <- list(
   Gradient = list(
     list(times_input = FALSE),
@@ -30,7 +30,7 @@ METHOD_DF <- list(
   DeepSHAP = list(
     list(rule_name = "rescale"),
     list(rule_name = "reveal_cancel")),
-  SHAP = list(list(nsim = 20))
+  SHAP = list(list(nsim = 50))
 )
 
 
@@ -38,18 +38,18 @@ METHOD_DF <- list(
 #                               Experiments
 ################################################################################
 
-# Preprocessing ----------------------------------------------------------------
+# 4.1 Impact of Data Preprocessing ---------------------------------------------
 
 # Continuous variables
 Prep_cont <- expand.grid(
-  n = 3000,
+  n = 4000,
   n_test = 1000,
   p = 12,
-  beta = 0.75,
-  mean = "range",
+  beta = 1,
+  mean = "random",
   sample_type = "normal",
-  dgp_type = c("linear", "pwlinear", "nonlinear"), 
-  scale_type = c("scale_none", "scale_zscore", "scale_minmax"), 
+  dgp_type = c("linear", "pwlinear", "nonlinear"),
+  scale_type = c("scale_none", "scale_zscore", "scale_maxabs"), 
   nn_units = c(256),
   nn_layers = c(3),
   nn_act.fct = c("relu")
@@ -57,24 +57,24 @@ Prep_cont <- expand.grid(
 
 # Binary/Categorical variables
 Prep_cat <- expand.grid(
-  n = 1500,
+  n = 2000,
   n_test = 1000,
   p = 12,
   n_levels = c(4, 12),
   beta = 0.5,
   level_beta = "mixed",
   level_probs = "equal",
-  encode_type = c("encode_label", "encode_onehot", "encode_dummy"),
+  encode_type = c("encode_label", "encode_onehot", "encode_dummy", "encode_binary"),
   nn_units = c(128),
   nn_layers = c(3),
   nn_act.fct = c("relu")
 )
 
-# Faithfulness -----------------------------------------------------------------
+# 4.2 Faithfulness of Effects --------------------------------------------------
 
 # Continuous variables
 Faith_cont <- expand.grid(
-  n = 3000,
+  n = 4000,
   n_test = 1000,
   p = 12,
   beta = "grouped",
@@ -90,10 +90,10 @@ Faith_cont <- expand.grid(
 # Binary/Categorical variables
 Faith_cat <- rbind(
   expand.grid( # Categorical variables
-    n = 1500,
+    n = 2000,
     n_test = 1000,
     p = 12,
-    n_levels = c(10),
+    n_levels = c(4),
     beta = "grouped",
     level_beta = "mixed",
     level_probs = "equal",
@@ -103,7 +103,7 @@ Faith_cat <- rbind(
     nn_act.fct = c("relu")
   ),
   expand.grid( # Binary variables
-    n = 1500,
+    n = 2000,
     n_test = 1000,
     p = 12,
     n_levels = c(2),
@@ -117,50 +117,32 @@ Faith_cat <- rbind(
   )
 )
 
-# Robustness -------------------------------------------------------------------
+# 4.2 Beyond Feature Attribution -----------------------------------------------
 
-# Continuous variables
-Robust_p_cont <- expand.grid(
-  n = 1500,
+BeyondA_cont <- expand.grid(
+  n = seq(200, 5000,  by = 400),
   n_test = 1000,
-  p = seq(4, 30, by = 4),
-  beta = "first_two",
+  p = 20,
+  beta = "swapping",
   mean = "random",
   sample_type = "normal",
-  dgp_type = "linear",
-  scale_type = c("scale_none", "scale_zscore", "scale_minmax"),
+  dgp_type = c("linear", "nonlinear"), 
+  scale_type = c("scale_zscore"), 
   nn_units = c(256),
   nn_layers = c(3),
   nn_act.fct = c("relu")
 )
 
-# Binary/Categorical variables
-Robust_p_cat <- expand.grid()
-  #n = 1500,
-  #n_test = 1000,
-  #p = seq(4, 30, by = 4),
-  #n_levels = c(4), #, 8, 12),
-  #beta = "first_two",
-  #level_beta = "mixed",
-  #level_probs = "equal",
-  #encode_type = "encode_onehot",
-  #nn_units = c(128),
-  #nn_layers = c(3),
-  #nn_act.fct = c("relu")
-#)
-
-# Robustness for correlated features
-Robust_corr <- expand.grid(
-  n = 3000,
+BeyondA_cat <- expand.grid(
+  n = c(100, seq(200, 2000,  by = 150)),
   n_test = 1000,
   p = 20,
-  corr = c(seq(0, 0.9, by = 0.05), 0.95), 
+  n_levels = c(4),
   beta = "swapping",
-  mean = "random",
-  sample_type = "normal",
-  dgp_type = "linear_and_squared_2",
-  scale_type = "scale_zscore",
-  nn_units = c(256),
+  level_beta = "mixed",
+  level_probs = "equal",
+  encode_type = c("encode_onehot"),
+  nn_units = c(128),
   nn_layers = c(3),
   nn_act.fct = c("relu")
 )

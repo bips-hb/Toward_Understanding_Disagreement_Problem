@@ -4,59 +4,92 @@
 ################################################################################
 
 # Utils for real datasets ------------------------------------------------------
-get_bike_sharing_ds <- function() {
+get_bike_sharing_ds <- function(scale_type = "scale_zscore") {
   data <- read.csv(here("utils/datasets/bike_sharing.csv"))
   data <- data[, c(-1, -2, -4, -5, -11, -14, -15)]
+  
+  # Get the preprocess function
+  scale_fun <- get_scale_fun(scale_type)
+  
+  # Scale numeric variables
+  data$temp <- scale_fun(data$temp)
+  data$hum <- scale_fun(data$hum)
+  data$windspeed <- scale_fun(data$windspeed)
+  #data$cnt <- data$cnt #scale_fun(data$cnt)
+  
+  # Set binary and categorical variables
   data$season <- as.factor(as.character(data$season))
-  data$cnt <- data$cnt / 1000
   data$holiday <- as.factor(as.character(data$holiday))
   data$weekday <- as.factor(as.character(data$weekday))
   data$workingday <- as.factor(as.character(data$workingday))
   data$weathersit <- as.factor(as.character(data$weathersit))
   
+  # Prepare and return data
   prepare_real_data(data, split = 0.2, y = 9, binary = c(2, 4), 
-                    categorical = c(1, 3, 5), outcome_type = "regression")
+                    categorical = c(1,3 ,5), outcome_type = "regression")
 }
 
-get_german_credit_ds <- function(scale_type = "scale_zscore") {
-  library("caret")
-  data("GermanCredit")
-  
-  data <- GermanCredit
-  
-  if (scale_type == "scale_zscore") {
-    scale_fun <- function(x) (x - mean(x)) / sd(x)
-  } else if (scale_type == "scale_minmax") {
-    scale_fun <- function(x) (x - min(x)) / (max(x) - min(x))
-  }
-  
-  data$Duration <- scale_fun(data$Duration)
-  data$Amount <- scale_fun(data$Amount)
-  data$Age <- scale_fun(data$Age)
-  
-  instance <- prepare_real_data(data, split = 0.2, y = 10, binary = NULL, 
-                                categorical = NULL, outcome_type = "classification")
-  
-  feat_names <- unlist(lapply(instance$feat_names, 
-                              function(x) strsplit(x, ".", fixed = TRUE)[[1]][1]))
-  cor_grp <- match(feat_names, unique(feat_names))
-  feat_names <- unique(feat_names)
-  
-  instance$feat_names <- feat_names
-  instance$cor_groups <- cor_grp
-  
-  instance
-}
-
-get_boston_housing_ds <- function() {
+get_boston_housing_ds <- function(scale_type = "scale_zscore") {
   library(mlbench)
   data("BostonHousing")
-  
   data <- BostonHousing
+  
+  # Get scale function
+  scale_fun <- get_scale_fun(scale_type)
+  
+  # Scale continuous variables
+  data$crim <- scale_fun(data$crim)
+  data$zn <- scale_fun(data$zn)
+  data$indus <- scale_fun(data$indus)
+  data$nox <- scale_fun(data$nox)
+  data$rm <- scale_fun(data$rm)
+  data$age <- scale_fun(data$age)
+  data$dis <- scale_fun(data$dis)
+  data$rad <- scale_fun(data$rad)
+  data$tax <- scale_fun(data$tax)
+  data$ptratio <- scale_fun(data$ptratio)
+  data$b <- scale_fun(data$b)
+  data$lstat <- scale_fun(data$lstat)
+  #data$medv <- scale_fun(data$medv)
+  
+  # Set binary and categorical variables
+  data$chas <- as.factor(as.character(data$chas))
+  
+  # Prepare and return dataset
   prepare_real_data(data, split = 0.2, y = 14, binary = c(4), 
                     categorical = NULL, outcome_type = "regression")
 }
 
+get_compas_ds <- function(scale_type = "scale_zscore") {
+  library(mlr3fairness)
+  data("compas", package = "mlr3fairness")
+  data <- compas
+  
+  # Get scale function
+  scale_fun <- get_scale_fun(scale_type)
+  
+  # Scale numerical variables
+  data$age <- scale_fun(data$age)
+  data$priors_count <- scale_fun(data$priors_count)
+  data$days_b_screening_arrest <- scale_fun(data$days_b_screening_arrest)
+  data$decile_score  <- scale_fun(data$decile_score)
+  data$length_of_stay  <- scale_fun(data$length_of_stay)
+  
+  # Set factors for binary and categorical variables
+  data$c_charge_degree <- as.factor(data$c_charge_degree)
+  data$race <- as.factor(data$race)
+  data$age_cat <- as.factor(data$age_cat)
+  data$score_text <- as.factor(data$score_text)
+  data$sex <- as.factor(data$sex)
+  data$is_recid <- NULL
+  data$two_year_recid <- as.factor(data$two_year_recid)
+  
+  prepare_real_data(data.frame(data), split = 0.2, y = 10, binary = c(2, 6), 
+                    categorical = c(3, 4, 5), outcome_type = "classification")
+}
+
+
+# Dataset preparation ----------------------------------------------------------
 prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL,
                               outcome_type = "regression") {
   # Order columns (outcome, numerical, binary, categorical)
@@ -133,3 +166,18 @@ prepare_real_data <- function(data, split, y, binary = NULL, categorical = NULL,
   )
 }
 
+
+# Utility functions ------------------------------------------------------------
+get_scale_fun <- function(scale_type) {
+  if (as.character(scale_type == "scale_zscore")) {
+    scale_fun <- function(x) (x - mean(x)) / sd(x)
+  } else if (as.character(scale_type) == "scale_none") {
+    scale_fun <- identity
+  } else if (as.character(scale_type) == "scale_maxabs") {
+    scale_fun <- function(x) x / max(abs(x))
+  } else {
+    stop("Unknown scale type: '", scale_type, "'!")
+  }
+  
+  scale_fun
+}

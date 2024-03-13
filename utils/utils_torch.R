@@ -28,10 +28,9 @@ get_torch_dataset <- dataset(
 
 # Model training ---------------------------------------------------------------
 train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "relu",
-                        n_cpus = 1, n_workers = 0) {
+                        n_cpus = 1, n_workers = 0, seed = 1) {
   # Set seed for reproducibility
-  #set.seed(42)
-  torch_manual_seed(42)
+  torch_manual_seed(seed)
   tryCatch(torch_set_num_interop_threads(n_cpus), error = function(c) NULL)
   torch_set_num_threads(n_cpus)
   
@@ -48,13 +47,13 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
   # Create torch dataloaders
   cli_progress_step("Creating data loaders...", "Crating data loaders!")
   train_dl <- get_torch_dataset(dataset$train) %>%
-    dataloader(batch_size = min(256, length(dataset$train$y)), shuffle = TRUE,
+    dataloader(batch_size = min(512, length(dataset$train$y)), shuffle = TRUE,
                num_workers = n_workers)
   valid_dl <- get_torch_dataset(dataset$valid) %>%
-    dataloader(batch_size = min(256, length(dataset$valid$y)), shuffle = FALSE,
+    dataloader(batch_size = min(512, length(dataset$valid$y)), shuffle = FALSE,
                num_workers = n_workers)
   test_dl <- get_torch_dataset(dataset$test) %>%
-    dataloader(batch_size = min(256, length(dataset$test$y)), shuffle = FALSE,
+    dataloader(batch_size = min(512, length(dataset$test$y)), shuffle = FALSE,
                num_workers = n_workers)
   
   cli_progress_step("Fitting model...", "Fitting model!")
@@ -76,7 +75,7 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
             mode = "min"),
           luz_callback_early_stopping(
             monitor = "valid_loss",
-            patience = 40,
+            patience = 50,
             mode = "min"),
           luz_callback_lr_scheduler(
             torch::lr_step, 
@@ -96,28 +95,28 @@ train_model <- function(p, n_units, n_layers, dataset, outcome_type, act.fct = "
     luz::evaluate(data = test_dl) %>%
     get_metrics()
   
-  error <- as.numeric(error[2,2])
-  cli_text("Test loss: {signif(error)}")
+  error_metric <- as.numeric(error[2,2])
+  cli_text("Test metric: {signif(error_metric)}")
   
   if (outcome_type == "regression") {
     # Calculate R²
     preds <- fitted_model %>% predict(newdata = test_dl) %>% 
       torch_squeeze() %>% as.numeric()
     y <- test_dl$dataset$df[, "y"]
-    r_squared <- 1 - mean((preds - y)**2) / mean((y - mean(y))**2)
-    cli_text("R² value: {signif(r_squared)}")
+    error <- 1 - mean((preds - y)**2) / mean((y - mean(y))**2)
+    cli_text("R² value: {signif(error)}")
   } else if (outcome_type == "classification") {
     preds <- fitted_model %>% predict(newdata = test_dl) %>% 
       torch_squeeze() %>% as.numeric()
     preds <- as.factor(ifelse(preds < 0.5, 0, 1))
     y <- as.factor(test_dl$dataset$df[, "y"])
-    r_squared <- confusionMatrix(preds, reference = y)$byClass[["F1"]]
-    cli_text("F1-score: {signif(r_squared)}")
+    error <- confusionMatrix(preds, reference = y)$byClass[["F1"]]
+    cli_text("F1-score: {signif(error)}")
   }
   
   list(model = fitted_model$model,
+       error_metric = error_metric,
        error = error,
-       r_squared_test = r_squared,
        r_squared_true = 1 - 1 / var(train_dl$dataset$df[, "y"]),
        num_inputs = p,
        outcome_type = outcome_type,
@@ -148,6 +147,8 @@ get_act <- function(act.fct) {
     res <- nn_elu()
   } else if (act.fct == "softplus") {
     res <- nn_softplus()
+  } else if (act.fct == "leaky_relu") {
+    res <- nn_leaky_relu()
   }
   
   res
@@ -178,33 +179,4 @@ get_dense_layers <- function(p, n_units, n_layers, act.fct = "relu") {
   })
   
   unlist(layers)
-}
-
-
-binary_enc <- function(a, num_levels) {
-  bits <- floor(log(num_levels) / log(2))
-  powers <- 2^(bits:0)
-  bitwAnd(a,powers)/powers
-}
-
-get_encoding_fun <- function(encode_type, num_levels) {
-  encode_FUN <- switch(as.character(encode_type),
-                       one_hot = one_hot_enc,
-                       dummy = dummy_enc,
-                       effect = effect_enc,
-                       label = label_enc, 
-                       binary = binary_enc)
-  
-  function(x) {
-    res <- t(apply(x, c(1, 2), encode_FUN, num_levels = num_levels, simplify = FALSE))
-    matrix(unlist(res), nrow = nrow(x), byrow = TRUE)
-  }
-}
-
-# Other utility functions ------------------------------------------------------
-combine_features <- function(res_1, cat_feat, FUN = identity) {
-  if (!is.matrix(res_1)) res_1 <- matrix(res_1, nrow = 1)
-  res <- lapply(seq_len(max(cat_feat)), 
-                function(i) rowSums(FUN(res_1[, which(cat_feat == i), drop = FALSE])))
-  do.call("cbind", args = res)
 }

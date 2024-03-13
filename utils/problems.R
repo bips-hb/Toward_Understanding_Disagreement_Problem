@@ -1,5 +1,6 @@
 ################################################################################
-#                                 Problems
+#                     Problem functions for `batchtools`
+#                 (they generate the data and train the NN)
 ################################################################################
 
 # Numerical problems -----------------------------------------------------------
@@ -34,7 +35,7 @@ syn_numerical <- function(data, job, n, p,
   
   # Train model
   instance <- train_model(p, nn_units, nn_layers, data, outcome_type, 
-                          nn_act.fct)
+                          nn_act.fct, seed = job$seed)
   
   # Add beta and outcome type
   instance$beta <- beta
@@ -67,7 +68,7 @@ syn_categorical <- function(data, job, n, p,
   sample_fun <- get_sample_fun("categorical", p = p, n_levels = n_levels,
                                level_probs = level_probs)
   dgp_fun <- get_dgp_fun("categorical", beta = beta, n_levels = n_levels, 
-                         level_beta = level_beta)
+                         level_beta = level_beta, beta0 = beta0)
   
   # Create data
   data <- get_dataset(sample_fun, dgp_fun, n, n_test, preprocess_type = encode_type,
@@ -75,7 +76,7 @@ syn_categorical <- function(data, job, n, p,
   
   # Train model
   instance <- train_model(length(data$cor_groups), nn_units, nn_layers, data, 
-                          outcome_type, nn_act.fct)
+                          outcome_type, nn_act.fct, seed = job$seed)
   
   # Add beta
   instance$beta <- beta
@@ -86,20 +87,23 @@ syn_categorical <- function(data, job, n, p,
 
 
 # Real data problems -----------------------------------------------------------
-get_realdata <- function(data, job, ds_name = "bike_sharing",
+get_realdata <- function(data, job, 
+                         ds_name = "bike_sharing",
+                         scale_type = "scale_none",
                          nn_units = 256,
                          nn_layers = 3, 
                          nn_act.fct = "relu", ...) {
   
   data <- switch(as.character(ds_name),
-                 bike_sharing = get_bike_sharing_ds(),
-                 boston_housing = get_boston_housing_ds(),
-                 german_credit = get_german_credit_ds(),
+                 bike_sharing = get_bike_sharing_ds(scale_type),
+                 boston_housing = get_boston_housing_ds(scale_type),
+                 german_credit = get_german_credit_ds(scale_type),
+                 compas = get_compas_ds(scale_type),
                  stop("Unknown dataset name: ", ds_name))
   
   # Train model
   instance <- train_model(length(data$cor_groups), nn_units, nn_layers, data, 
-                          data$outcome_type, nn_act.fct)
+                          data$outcome_type, nn_act.fct, seed = job$seed)
   
   instance
 }
@@ -112,15 +116,13 @@ get_realdata <- function(data, job, ds_name = "bike_sharing",
 get_mean <- function(mean, p) {
   switch (as.character(mean),
           zeros = rep(0, p),
-          range = seq(-0.75, 0.75, length.out = p),
-          range_random = sample(seq(-0.75, 0.75, length.out = p)),
-          random = runif(p, min = -0.75, max = 0.75),
+          random = runif(p, min = -2, max = 2),
           stop("Unknown value of 'mean': '", mean, "'!")
   )
 }
 
 get_sigma <- function(corr, p) {
-  res <- diag(runif(p, 0.9, 1.3))
+  res <- diag(runif(p, 0.9, 1.1))
   
   for (i in seq_len(p)) {
     if (i %% 2 == 1 &  i != p) {
@@ -134,26 +136,18 @@ get_sigma <- function(corr, p) {
 
 get_beta <- function(beta, p) {
   switch (as.character(beta),
-          first_two = c(1, -1, rep(0, length.out = p - 2)),
-          swapping = rep(c(2, 0), length.out = p),
+          swapping = rep(c(1, 0), length.out = p),
           equal = rep(1, length.out = p),
-          grouped = rep(c(0.1, 0.4, 0.9), each = p %/% 3, length.out = p),
-          positive = seq(1/p, 1, length.out = p),
-          negative = -seq(1/p, 1, length.out = p),
-          mixed = seq(-1, 1, length.out = p),
-          positive_strong = seq(0.25, 1, length.out = p),
+          increasing = seq(1/p, 1, length.out = p),
+          grouped = rep(c(0.1, 0.4, 1), each = p %/% 3, length.out = p),
+          random = runif(p, min = -1, max = 1),
           rep(as.numeric(beta), length.out = p))
           
 }
 
 get_level_beta <- function(level_beta, n_levels) {
   switch(as.character(level_beta),
-         range_random = sample(seq(-1, 1, length.out = n_levels)),
-         pos_random = runif(n_levels),
-         neg_ramdom = runif(n_levels, min = -1, max = 0),
          mixed_random = runif(n_levels, min = -1, max = 1),
-         pos = seq(1/n_levels, 1, length.out = n_levels),
-         neg = seq(-1, -1/n_levels, length.out = n_levels),
          mixed = seq(-1, 1, length.out = n_levels),
          stop("Unknown value of 'level_beta': '", level_beta, "'!"))
 }

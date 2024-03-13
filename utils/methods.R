@@ -264,7 +264,7 @@ deepshap_wrapper <- function(instance, rule_name, ignore_last_act = TRUE) {
   result <- run_deepshap(converter, instance$data$test$x,
                          rule_name = as.character(rule_name),
                          data_ref = data_ref, 
-                         limit_ref = 100, verbose = FALSE, 
+                         limit_ref = 50, verbose = FALSE, 
                          ignore_last_act = ignore_last_act)
   
   # Get results
@@ -316,14 +316,15 @@ shap_wrapper <- function(instance, nsim = 20, ignore_last_act = TRUE) {
 }
 
 # LIME ------------------------------------------------------------------------
-lime_wrapper <- function(instance, ignore_last_act = TRUE) {
+lime_wrapper <- function(instance, ignore_last_act = TRUE, nperm = 200) {
   library(innsight)
   data_ref <- instance$data$test$x
   start_time <- Sys.time()
   
   # Apply method
   result <- run_lime(instance$model$model, instance$data$test$x,
-                     data_ref = data_ref)
+                     data_ref = data_ref,
+                     n_permutations = nperm)
   # Get results
   result <- get_result(result)
   dim(result) <- dim(result)[-length(dim(result))]
