@@ -227,6 +227,46 @@ create_beyond_attribution_fig <- function(result) {
   
 }
 
+################################################################################
+#                        Appendix: Model Performance
+################################################################################
+create_table_1 <- function(result) {
+  res_tab <- result[problem %in% c("Prep_cont", "Faith_cont")]
+  res_tab_linear <- res_tab[, .(r2 = paste0(round(mean(error_ref), digits = 2), " ± ", round(sd(error_ref), digits = 2))),
+                            by = c("data_type", "problem")]
+  res_tab <- res_tab[, .(r2 = paste0(round(mean(error), digits = 2), " ± ", round(sd(error), digits = 2))), 
+                     by = c("preprocess_type", "data_type", "problem")]
+  res_tab <- dcast(res_tab, problem + preprocess_type ~ data_type, value.var = "r2")
+  res_tab_linear <- dcast(res_tab_linear, problem ~ data_type, value.var = "r2")
+  res_tab_linear$preprocess_type <- "(Linear model)"
+  res_tab <- rbind(res_tab, res_tab_linear)
+  res_tab <- res_tab[c(2, 3, 4, 6, 1, 5), ]
+  res_tab <- kbl(res_tab, "pipe", booktabs = TRUE) %>%
+    kable_classic() %>%
+    add_header_above(c(" " = 1, " " = 1, "Effect type" = 3)) %>%
+    collapse_rows(columns = 1, valign = "top")
+  
+  res_tab
+}
+
+create_table_2 <- function(result) {
+  res_tab <- result[problem %in% c("Prep_cat", "Faith_cat")]
+  res_tab_linear <- res_tab[, .(r2 = paste0(round(mean(error_ref), digits = 2), " ± ", round(sd(error_ref), digits = 2))),
+                            by = c("preprocess_type", "problem")]
+  res_tab <- res_tab[, .(r2 = paste0(round(mean(error), digits = 2), " ± ", round(sd(error), digits = 2))), 
+                     by = c("preprocess_type", "data_type", "problem")]
+  res_tab <- dcast(res_tab, problem + data_type ~ preprocess_type, value.var = "r2")
+  res_tab_linear <- dcast(res_tab_linear, problem ~ preprocess_type, value.var = "r2")
+  res_tab_linear$data_type <- "(Linear model)"
+  res_tab <- rbind(res_tab, res_tab_linear)
+  res_tab <- res_tab[c(3, 4, 6, 1, 2, 5), ]
+  res_tab <- kbl(res_tab, "pipe", booktabs = TRUE) %>%
+    kable_classic() %>%
+    add_header_above(c(" " = 1, " " = 1, "Encoding" = 4)) %>%
+    collapse_rows(columns = 1, valign = "top")
+  
+  res_tab
+}
 
 ################################################################################
 #                  Utility functions for getting the results

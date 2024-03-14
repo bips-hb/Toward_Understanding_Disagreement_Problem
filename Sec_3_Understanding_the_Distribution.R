@@ -1,7 +1,7 @@
 ################################################################################
 #              SCRIPT FOR REPRODUCING THE FIGURES IN THE PAPER                 #
-#              "Understanding Feature Attribution Methods                      #  
-#                            on Tabular Data"                                  #
+#              "Toward Understanding the Disagreement Problem in               #
+#                   Neural Network Feature Attribution"                        #
 #                                                                              #
 #                               SECTION 3:                                     #
 #               "Understanding the Explanation's Distribution"                 #

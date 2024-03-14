@@ -1,7 +1,11 @@
 ################################################################################
-#
-#           SECTION 4: Do Feature Attribution Methods Attribute?
-#
+#              SCRIPT FOR REPRODUCING THE FIGURES IN THE PAPER                 #
+#              "Toward Understanding the Disagreement Problem in               #
+#                   Neural Network Feature Attribution"                        #
+#                                                                              #
+#                               SECTION 4:                                     #
+#               "Do Feature Attribution Methods Attribute?"                    #
+#                                                                              #
 ################################################################################
 library("batchtools")
 library("data.table")
@@ -160,37 +164,11 @@ create_beyond_attribution_fig(res_beyond)
 # Appendix: Show model performance ---------------------------------------------
 
 # Create Table 1
-res_tab <- res$res_error[problem %in% c("Prep_cont", "Faith_cont")]
-res_tab_linear <- res_tab[, .(r2 = paste0(round(mean(error_ref), digits = 2), " ± ", round(sd(error_ref), digits = 2))),
-                          by = c("data_type", "problem")]
-res_tab <- res_tab[, .(r2 = paste0(round(mean(error), digits = 2), " ± ", round(sd(error), digits = 2))), 
-                   by = c("preprocess_type", "data_type", "problem")]
-res_tab <- dcast(res_tab, problem + preprocess_type ~ data_type, value.var = "r2")
-res_tab_linear <- dcast(res_tab_linear, problem ~ data_type, value.var = "r2")
-res_tab_linear$preprocess_type <- "(Linear model)"
-res_tab <- rbind(res_tab, res_tab_linear)
-res_tab <- res_tab[c(2, 3, 4, 6, 1, 5), ]
-res_tab <- kbl(res_tab, "pipe", booktabs = TRUE) %>%
-  kable_classic() %>%
-  add_header_above(c(" " = 1, " " = 1, "Effect type" = 3)) %>%
-  collapse_rows(columns = 1, valign = "top")
-
-save_kable(res_tab, file = here("figures/Sec_App_table_1.html"))
+table_1 <- create_table_1(res$res_error)
+save_kable(table_1, file = here("figures/Sec_App_table_1.html"))
 
 # Create Table 2
-res_tab <- res$res_error[problem %in% c("Prep_cat", "Faith_cat")]
-res_tab_linear <- res_tab[, .(r2 = paste0(round(mean(error_ref), digits = 2), " ± ", round(sd(error_ref), digits = 2))),
-                          by = c("preprocess_type", "problem")]
-res_tab <- res_tab[, .(r2 = paste0(round(mean(error), digits = 2), " ± ", round(sd(error), digits = 2))), 
-                   by = c("preprocess_type", "data_type", "problem")]
-res_tab <- dcast(res_tab, problem + data_type ~ preprocess_type, value.var = "r2")
-res_tab_linear <- dcast(res_tab_linear, problem ~ preprocess_type, value.var = "r2")
-res_tab_linear$data_type <- "(Linear model)"
-res_tab <- rbind(res_tab, res_tab_linear)
-res_tab <- res_tab[c(3, 4, 6, 1, 2, 5), ]
-res_tab <- kbl(res_tab, "pipe", booktabs = TRUE) %>%
-  kable_classic() %>%
-  add_header_above(c(" " = 1, " " = 1, "Encoding" = 4)) %>%
-  collapse_rows(columns = 1, valign = "top")
-
+table_2 <- create_table_2(res$res_error)
 save_kable(res_tab, file = here("figures/Sec_App_table_2.html"))
+
+

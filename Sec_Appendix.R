@@ -1,5 +1,10 @@
 ################################################################################
-#                               APPENDIX
+#              SCRIPT FOR REPRODUCING THE FIGURES IN THE PAPER                 #
+#              "Toward Understanding the Disagreement Problem in               #
+#                   Neural Network Feature Attribution"                        #
+#                                                                              #
+#                             Appendix:                                        #
+#                                                                              #
 ################################################################################
 library("here")
 library("ggplot2")
@@ -53,4 +58,5 @@ ggplot(data) +
     ggside.panel.background = element_blank()
   )
 
+if (!dir.exists(here("figures/"))) dir.create(here("figures/"))
 ggsave(here("figures/Sec_App_functions.pdf"), width = 7, height = 5)

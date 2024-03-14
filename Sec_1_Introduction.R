@@ -1,9 +1,16 @@
 ################################################################################
-#                       Introduction (COMPAS dataset)
+#              SCRIPT FOR REPRODUCING THE FIGURES IN THE PAPER                 #
+#              "Toward Understanding the Disagreement Problem in               #
+#                   Neural Network Feature Attribution"                        #
+#                                                                              #
+#                               SECTION 1:                                     #
+#                    "Introduction" (COMPAS dataset)                           #
+#                                                                              #
 ################################################################################
 library("innsight")
 library("torch")
 library("luz")
+library("mlr3fairness")
 library("data.table")
 library("here")
 library("cli")
@@ -103,4 +110,5 @@ ggplot(res) +
 
 
 # Save plot
+if (!dir.exists(here("figures/"))) dir.create(here("figures/"))
 ggsave(paste0("figures/Sec_1_COMPAS.pdf"), width = 16, height = 5)
