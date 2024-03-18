@@ -22,6 +22,10 @@ reg_dir <- here(file.path("registries", reg_name))
 required_pkgs <- c("innsight", "luz", "torch", "mvtnorm", "cli", "here", 
                    "data.table")
 
+# !!! FOR REPRODUCING THE RESULTS WITHPUT RUNNING THE SIMULATIONS AGAIN, SKIP
+# !!! THE FOLLOWING PART AND GO TO THE END OF THIS SKRIPT 
+# (i.e., skip to this <==========)
+
 # Create `batchtools` registry
 if (!file.exists(here("registries"))) dir.create(here("registries"))
 #unlink(reg_dir, recursive = TRUE) # delete old simulations
@@ -146,6 +150,9 @@ source(here("utils/utils_figures.R"))
 # Load and prepare results from registry ---------------------------------------
 res <- get_and_prepare_results(reg_dir, here("utils/config.R"))
 
+# USE The FOLLOWING CODE, IF YOU WANT TO USE OUR SAVED RESULTS <========================
+#res <- readRDS(here("results/results.rds"))
+
 # Save results
 saveRDS(res, file = here("results.rds"))
 
@@ -169,6 +176,6 @@ save_kable(table_1, file = here("figures/Sec_App_table_1.html"))
 
 # Create Table 2
 table_2 <- create_table_2(res$res_error)
-save_kable(res_tab, file = here("figures/Sec_App_table_2.html"))
+save_kable(table_2, file = here("figures/Sec_App_table_2.html"))
 
 

@@ -17,7 +17,9 @@ running example in Section 3.
 * `Sec_4_Simulations.R` runs the simulation study (can last up to several days)
 and creates the figures in Section 4.
 
-* `Sec_Appendix` creates the Figure 7 showing the transformations for the 
+* `Sec_Appendix.R` creates the Figure 7 showing the transformations for the 
 non-linear effects.
 
-All created figures are saved in the `figures/` folder.
+All created figures are saved in the `figures/` folder. However, the final 
+figures used in the paper and the results from the simulation study of Section 
+4 are stored in the `results/` folder.
